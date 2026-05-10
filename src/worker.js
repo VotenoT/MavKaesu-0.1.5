@@ -289,6 +289,16 @@ export class MatchRoom extends DurableObject {
       this.game.message = "O Warden bloqueou a sala 50.";
       return;
     }
+    if (this.game.prediction && this.game.prediction.room <= room) {
+      const pred = this.game.prediction;
+      this.game.prediction = null;
+      if (pred.room === room) {
+        this.game.event = makeEvent(pred.type, room, seed, true);
+        this.applyPersistentEventEffects();
+        this.game.message = `A previsão da Kayllane se cumpriu: ${this.game.event.label}.`;
+        return;
+      }
+    }
     if (this.game.lauraRoomsLeft > 0) {
       this.game.event = makeEvent("laura", room, seed, true);
       this.game.lauraRoomsLeft -= 1;
@@ -305,14 +315,6 @@ export class MatchRoom extends DurableObject {
       this.game.event = makeEvent("storm", room, seed, true);
       this.game.stormRoomsLeft -= 1;
       this.game.message = this.game.stormRoomsLeft > 0 ? `A tempestade continua por mais ${this.game.stormRoomsLeft} sala(s).` : "A tempestade está se dissipando.";
-      return;
-    }
-    if (this.game.prediction && this.game.prediction.room === room) {
-      const pred = this.game.prediction;
-      this.game.prediction = null;
-      this.game.event = makeEvent(pred.type, room, seed, true);
-      this.applyPersistentEventEffects();
-      this.game.message = `A previsão da Kayllane se cumpriu: ${this.game.event.label}.`;
       return;
     }
     const rand = mulberry32(seed);
@@ -337,7 +339,7 @@ export class MatchRoom extends DurableObject {
 
   applyPersistentEventEffects() {
     if (this.game.event.type === "laura") this.game.lauraRoomsLeft = 4;
-    if (this.game.event.type === "maleta") this.game.maletaRoomsLeft = 2;
+    if (this.game.event.type === "maleta") this.game.maletaRoomsLeft = 1;
     if (this.game.event.type === "storm") this.game.stormRoomsLeft = 2;
   }
 
