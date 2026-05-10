@@ -163,7 +163,7 @@
     const $ = (id) => document.getElementById(id);
     const canvas = $('game');
     const ctx = canvas.getContext('2d', { alpha:false });
-    const imgs = Object.create(null), sounds = Object.create(null), cleanedImageCache = Object.create(null);
+    const imgs = Object.create(null), sounds = Object.create(null), cleanedImageCache = Object.create(null), spriteTrimCache = Object.create(null);
     const app = {
       ws:null, clientId:getClientId(), myId:null, roomCode:'', selectedHero:localStorage.getItem('mavCoopHero') || 'votenot', connected:false, ping:0,
       state:{ game:{ mode:'menu', room:1, event:null, message:'' }, players:[] }, lastStateAt:0, localRoomKey:'', toastUntil:0, msg:'', loaded:false,
@@ -186,8 +186,9 @@
     function friendPlayers(){ return app.state.players.filter(p=>p.id!==app.myId); }
     function eventHudHtml(game){
       const ev = game?.event || { type:'none' };
+      const room = Number(game?.room || 1);
       const lines = [];
-      if(game?.prediction){
+      if(game?.prediction && Number(game.prediction.room) > room){
         const p = game.prediction;
         const label = EVENT_LABELS[p.type] || p.label || p.type || 'Evento';
         lines.push(`🔮: ${label} - Sala ${p.room}`);
@@ -195,7 +196,7 @@
       if(ev && ev.type !== 'none' && ev.type !== 'crystal'){
         lines.push(EVENT_LABELS[ev.type] || ev.label || ev.type);
       }
-      if(ev && ev.type === 'crystal' && ev.prediction && !game?.prediction){
+      if(ev && ev.type === 'crystal' && ev.prediction && Number(ev.prediction.room) > room){
         const label = EVENT_LABELS[ev.prediction.type] || ev.prediction.label || ev.prediction.type || 'Evento';
         lines.push(`🔮: ${label} - Sala ${ev.prediction.room}`);
       }
@@ -208,10 +209,12 @@
     function renderEventBanner(){
       const game = app.state.game || {};
       const ev = game.event || {type:'none'};
+      const room = Number(game.room || 1);
       const box = $('eventBanner');
-      if(game.mode !== 'playing' || ((!ev || ev.type === 'none') && !game.prediction)){ box.style.display='none'; return; }
+      const hasFuturePrediction = !!(game.prediction && Number(game.prediction.room) > room);
+      if(game.mode !== 'playing' || ((!ev || ev.type === 'none') && !hasFuturePrediction)){ box.style.display='none'; return; }
       const lines = [];
-      if(game.prediction){
+      if(hasFuturePrediction){
         const p = game.prediction;
         lines.push(`<b>🔮 ${EVENT_LABELS[p.type]||p.type} - Sala ${p.room}</b>`);
       }
@@ -219,7 +222,7 @@
         let detail = '';
         if(ev.type==='fire') detail = `Saia em até ${Math.max(0,Math.ceil(5-eventSeconds()))}s ou morre`;
         else if(ev.type==='scalding') detail = 'Chão laranja causa dano. Defenda ou corra';
-        else if(ev.type==='kronos'){ const total=(app.eventRuntime.runes||ev.runes||[]).length||0; detail = `Colete as runas • ${app.eventRuntime.runesCollected||0}/${total} • pulo x1.25`; }
+        else if(ev.type==='kronos'){ const total=(app.eventRuntime.runes||ev.runes||[]).length||0; detail = `Colete as runas • ${app.eventRuntime.runesCollected||0}/${total} • pulo x1.5`; }
         else if(ev.type==='matteus') detail = app.eventRuntime.healDone ? 'A névoa se dissipou' : `Aguente ${Math.max(0,Math.ceil(5-eventSeconds()))}s para receber cura`;
         else if(ev.type==='rocket') detail = 'Defenda o foguete do Astro no momento certo';
         else if(ev.type==='laura') detail = 'Laura está perseguindo a dupla pelo corredor';
@@ -228,10 +231,11 @@
         else if(ev.type==='akane') detail = ev.mode==='heal'?'Akane pode curar a dupla':'Akane pode causar dano';
         else if(ev.type==='areia') detail = 'A areia puxa e causa dano se você ficar no chão';
         else if(ev.type==='timao') detail = 'Timão avançará a sala automaticamente';
+        else if(ev.type==='storm') detail='Nuvens carregadas: 20% de chance de raio por segundo';
         else if(ev.type==='other') detail = 'Pequeno respiro antes do próximo perigo';
         else if(ev.type==='wardenBoss') detail = 'Desvie dos raios e sobreviva';
         lines.push(`<b>${escapeHtml(EVENT_LABELS[ev.type]||ev.label||ev.type)}</b>${detail?`<br><span>${escapeHtml(detail)}</span>`:''}`);
-      } else if(ev?.type==='crystal' && ev.prediction && !game.prediction){
+      } else if(ev?.type==='crystal' && ev.prediction && Number(ev.prediction.room) > room && !hasFuturePrediction){
         lines.push(`<b>🔮 ${escapeHtml(EVENT_LABELS[ev.prediction.type]||ev.prediction.type)} - Sala ${ev.prediction.room}</b>`);
       }
       box.innerHTML = lines.join('<hr style="border:0;border-top:1px solid rgba(255,255,255,.15);margin:5px 0">');
@@ -301,7 +305,20 @@
     }
     function roomImage(){ const r=app.state.game?.room||1; const n=((r-1)%30)+1; return `room_${String(n).padStart(2,'0')}.png`; }
     function draw(){ ctx.clearRect(0,0,W,H); const bg=imgs[roomImage()]||imgs['room_01.png']; if(bg&&bg.complete&&bg.naturalWidth) ctx.drawImage(bg,0,0,W,H); else { const g=ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,'#0b203b'); g.addColorStop(1,'#070a16'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); } ctx.fillStyle='rgba(0,0,0,.20)'; ctx.fillRect(0,0,W,H); drawGround(); drawEventLayer(); drawExit(); drawPlayers(); drawEffects(); if(performance.now()<app.toastUntil) $('toast').style.display='block'; else $('toast').style.display='none'; }
-    function drawGround(){ const gy=GROUND_Y+8; const grad=ctx.createLinearGradient(0,gy,0,H); grad.addColorStop(0,'rgba(30,210,255,.16)'); grad.addColorStop(1,'rgba(5,15,30,.72)'); ctx.fillStyle=grad; ctx.fillRect(0,gy,W,H-gy); ctx.fillStyle='rgba(220,245,255,.24)'; ctx.fillRect(0,gy-4,W,4); for(let x=0;x<W;x+=64){ ctx.fillStyle='rgba(255,255,255,.05)'; ctx.fillRect(x,gy+10,34,3); } }
+    function drawGround(){
+      const gy=GROUND_Y;
+      const grad=ctx.createLinearGradient(0,gy,0,H);
+      grad.addColorStop(0,'rgba(30,210,255,.16)');
+      grad.addColorStop(1,'rgba(5,15,30,.72)');
+      ctx.fillStyle=grad;
+      ctx.fillRect(0,gy,W,H-gy);
+      ctx.fillStyle='rgba(220,245,255,.30)';
+      ctx.fillRect(0,gy-3,W,3);
+      for(let x=0;x<W;x+=64){
+        ctx.fillStyle='rgba(255,255,255,.05)';
+        ctx.fillRect(x,gy+10,34,3);
+      }
+    }
     function drawExit(){ /* saída invisível: avanço continua quando o jogador chega ao lado direito */ }
     function drawEventLayer(){ const ev=app.state.game?.event||{type:'none'}; const rt=app.eventRuntime; if(ev.type==='areia'){ ctx.fillStyle='rgba(170,125,55,.18)'; ctx.fillRect(0,GROUND_Y-10,W,70); for(let x=0;x<W;x+=50){ ctx.fillStyle='rgba(255,230,150,.12)'; ctx.beginPath(); ctx.ellipse(x,GROUND_Y+18,30,7,0,0,Math.PI*2); ctx.fill(); } }
       if(ev.type==='web'){ ctx.save(); ctx.globalAlpha=.78; ctx.strokeStyle='rgba(225,240,255,.30)'; ctx.lineWidth=2; for(let x=40;x<W;x+=70){ ctx.beginPath(); ctx.moveTo(x,70); ctx.lineTo(x,H); ctx.stroke(); } for(let y=95;y<H;y+=58){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); } ctx.strokeStyle='rgba(255,255,255,.16)'; ctx.lineWidth=1; for(let i=0;i<9;i++){ ctx.beginPath(); ctx.moveTo(i*115,80); ctx.lineTo(W-i*70,H); ctx.stroke(); } ctx.restore(); }
@@ -423,11 +440,33 @@
     function spriteFor(hero,anim,t){ const h=HEROES[hero]||HEROES.votenot; if(anim==='defense')return h.defense; if(anim==='jump')return h.jump; if(anim==='down')return h.down; if(anim==='walk')return h.walk[Math.floor(t*10)%h.walk.length]; return h.idle; }
     function drawLocalPlayer(me){ const file=spriteFor(me.hero,app.player.anim,performance.now()/1000); drawSprite(file,app.player.x,app.player.y,app.player.dir,me.name,!me.alive||me.out,me.defending,me.hero); }
     function drawServerPlayer(p){ drawSprite(spriteFor(p.hero,p.anim||'idle',performance.now()/1000),p.x,p.y,p.dir,p.name,!p.alive||p.out,p.defending,p.hero); }
+
+    function spriteAlphaBox(file, img){
+      if(spriteTrimCache[file]) return spriteTrimCache[file];
+      if(!img || !img.complete || !img.naturalWidth) return {sx:0,sy:0,sw:1,sh:1};
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth; c.height=img.naturalHeight;
+      const cx=c.getContext('2d',{willReadFrequently:true});
+      cx.drawImage(img,0,0);
+      let data;
+      try{ data=cx.getImageData(0,0,c.width,c.height).data; }catch{ return {sx:0,sy:0,sw:img.naturalWidth,sh:img.naturalHeight}; }
+      let minX=c.width, minY=c.height, maxX=-1, maxY=-1;
+      for(let y=0;y<c.height;y++){
+        for(let x=0;x<c.width;x++){
+          const i=(y*c.width+x)*4;
+          if(data[i+3]>12){
+            if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y;
+          }
+        }
+      }
+      const box = maxX<0 ? {sx:0,sy:0,sw:img.naturalWidth,sh:img.naturalHeight} : {sx:minX,sy:minY,sw:maxX-minX+1,sh:maxY-minY+1};
+      spriteTrimCache[file]=box;
+      return box;
+    }
+
     function drawSprite(file,x,y,dir,name,ghost,def,hero){
       const img=imgs[file];
-      const baseW=88, baseH=118;
-      const visualScale=hero==='astro'?1.05:1;
-      const w=baseW*visualScale, h=baseH*visualScale;
+      const targetH=hero==='astro'?132:126;
       ctx.save();
       ctx.globalAlpha=ghost?.45:1;
       ctx.translate(x,y);
@@ -450,10 +489,14 @@
         ctx.fill();
       }
       if(img&&img.complete&&img.naturalWidth){
-        ctx.drawImage(img,-w/2,-h,w,h);
+        const b=spriteAlphaBox(file,img);
+        const scale=targetH/Math.max(1,b.sh);
+        const w=b.sw*scale;
+        const h=b.sh*scale;
+        ctx.drawImage(img,b.sx,b.sy,b.sw,b.sh,-w/2,-h,w,h);
       } else {
         ctx.fillStyle=hero==='shadow'?'#2d35ff':'#00eaff';
-        ctx.fillRect(-baseW/4,-baseH,baseW/2,baseH);
+        ctx.fillRect(-22,-126,44,126);
       }
       if(def){
         ctx.save();
@@ -520,7 +563,7 @@
       ctx.fillStyle='#fff';
       ctx.font='800 13px Arial';
       ctx.textAlign='center';
-      ctx.fillText(name,x,y-h-8);
+      ctx.fillText(name,x,y-132);
       ctx.textAlign='start';
     }
     function loop(t){ const dt=Math.min(.033,(t-app.perf.last)/1000||.016); app.perf.last=t; step(dt); draw(); requestAnimationFrame(loop); }
