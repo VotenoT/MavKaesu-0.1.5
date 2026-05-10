@@ -110,11 +110,6 @@
   #exitBtn { top: 104px !important; width: 96px !important; height: 32px !important; font-size: 12px !important; }
 }
 
-
-#dashBtn { position:absolute; right:182px; bottom:120px; width:78px; height:78px; border-radius:22px; font-size:15px; background:rgba(245,245,255,.24); border-color:rgba(255,255,255,.34); box-shadow:0 0 18px rgba(255,255,255,.18); }
-#dashBtn.hidden { display:none !important; }
-@media (max-height:520px){ #dashBtn { right:174px; bottom:116px; width:70px; height:70px; font-size:13px; } }
-
 </style>
 </head>
 <body>
@@ -129,7 +124,7 @@
     <div id="toast"></div><div id="eventBanner"></div>
     <div class="controlsLayer hidden" id="controlsLayer">
       <div class="movePad"><button class="gameBtn arrowBtn" id="leftBtn">←</button><button class="gameBtn arrowBtn" id="rightBtn">→</button></div>
-      <div class="actionPad"><button class="gameBtn" id="jumpBtn">PULAR</button><button class="gameBtn hidden" id="dashBtn">DASH</button><button class="gameBtn" id="defBtn">DEF</button><button class="gameBtn" id="exitBtn">SAIR</button></div>
+      <div class="actionPad"><button class="gameBtn" id="jumpBtn">PULAR</button><button class="gameBtn" id="defBtn">DEF</button><button class="gameBtn" id="exitBtn">SAIR</button></div>
     </div>
     <div class="deadOverlay" id="deadOverlay"><h2>Você caiu nessa tentativa</h2><p>Seu amigo ainda pode continuar. Você pode assistir ou sair da tentativa.</p><button class="btn danger" id="quitDeadBtn">Desistir da tentativa</button></div>
     <section class="screen active" id="menuScreen"><div class="panel">
@@ -159,7 +154,7 @@
       votenot: { label:'VotenoT', role:'Chamas e defesa', hp:100, preview:'volter_skin.png', idle:'player_idle.png', jump:'player_jump.png', down:'player_down.png', defense:'player_defense.png', walk:['player_walk.png','player_walk1.png','player_walk2.png'] },
       astro: { label:'Astro', role:'Portais e mobilidade', hp:125, preview:'astro_skin.png', idle:'astro_idle.png', jump:'astro_jump.png', down:'astro_down.png', defense:'astro_defense.png', walk:['astro_walk.png','astro_walk1.png','astro_walk2.png'] },
       rex: { label:'Rex', role:'Resistência e impacto', hp:100, preview:'rex_skin.png', idle:'rex_idle.png', jump:'rex_jump.png', down:'rex_down.png', defense:'rex_defense.png', walk:['rex_walk.png','rex_walk1.png','rex_walk2.png'] },
-      shadow: { label:'Shadow', role:'Velocidade e resiliência', hp:100, preview:'shadow_skin.png', idle:'shadow_idle.png', jump:'shadow_jump.png', down:'shadow_idle.png', defense:'shadow_defense.png', walk:['shadow_walk.png','shadow_walk1.png','shadow_walk2.png','shadow_walk3.png'] }
+      shadow: { label:'Shadow', role:'Velocidade e resiliência', hp:100, preview:'shadow_skin.png', idle:'shadow_idle.png', jump:'shadow_jump.png', down:'shadow_idle.png', defense:'shadow_defense.png', walk:['shadow_walk.png','shadow_walk1.png','shadow_walk2.png'] }
     };
     const CORE_ASSETS = ['room_01.png','room_02.png','room_03.png','room_04.png','room_05.png','room_06.png','room_07.png','room_08.png','room_09.png','room_10.png','room_11.png','room_12.png','room_13.png','room_14.png','room_15.png','room_16.png','room_17.png','room_18.png','room_19.png','room_20.png','room_21.png','room_22.png','room_23.png','room_24.png','room_25.png','room_26.png','room_27.png','room_28.png','room_29.png','room_30.png','room_k.png','laura.png','laura_walk.png','laura_walk1.png','laura_walk2.png','laura_walk3.png','akane.png','akane_heal.png','akane_damage.png','astro_rocket.png','foguete.png','maleta.png','chamas.png','guarda.png','warden.png','warden_attack.png','shriek.png','death.mp3','win.mp3','menu.mp3'];
     const HERO_ASSETS = Object.values(HEROES).flatMap(h => [h.preview,h.idle,h.jump,h.down,h.defense,...h.walk]);
@@ -168,13 +163,13 @@
     const $ = (id) => document.getElementById(id);
     const canvas = $('game');
     const ctx = canvas.getContext('2d', { alpha:false });
-    const imgs = Object.create(null), sounds = Object.create(null), cleanedImageCache = Object.create(null), spriteTrimCache = Object.create(null);
+    const imgs = Object.create(null), sounds = Object.create(null), cleanedImageCache = Object.create(null);
     const app = {
       ws:null, clientId:getClientId(), myId:null, roomCode:'', selectedHero:localStorage.getItem('mavCoopHero') || 'votenot', connected:false, ping:0,
       state:{ game:{ mode:'menu', room:1, event:null, message:'' }, players:[] }, lastStateAt:0, localRoomKey:'', toastUntil:0, msg:'', loaded:false,
       player:{ x:150, y:GROUND_Y, vx:0, vy:0, dir:1, grounded:true, defending:false, anim:'idle' },
-      input:{ left:false, right:false, jump:false, defend:false, dash:false },
-      lastPosSent:0, lastDamageAt:0, lastAdvanceAt:0, stunUntil:0, dashUntil:0, lastDashAt:0, eventRuntime:{}, perf:{ last:performance.now(), acc:0, frames:0, fps:0 }
+      input:{ left:false, right:false, jump:false, defend:false },
+      lastPosSent:0, lastDamageAt:0, lastAdvanceAt:0, stunUntil:0, eventRuntime:{}, perf:{ last:performance.now(), acc:0, frames:0, fps:0 }
     };
     function getClientId(){ try{ let id=localStorage.getItem('mavCoopClientId'); if(!id){ id='c_'+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem('mavCoopClientId', id); } return id; } catch { return 'c_'+Math.random().toString(36).slice(2); } }
     function loadAssets(){ let done=0; const update=()=>{ done++; $('loadText').textContent=Math.round((done/ASSET_LIST.length)*100)+'%'; if(done>=ASSET_LIST.length){ app.loaded=true; $('loading').style.display='none'; playMenuMusic(); }}; for(const file of ASSET_LIST){ if(/\.(mp3|wav|ogg)$/i.test(file)){ const a=new Audio(AS+file); a.preload='metadata'; a.addEventListener('canplaythrough',update,{once:true}); a.addEventListener('error',update,{once:true}); sounds[file]=a; } else { const img=new Image(); img.onload=update; img.onerror=update; img.src=AS+file; imgs[file]=img; }} if(!ASSET_LIST.length) update(); }
@@ -191,9 +186,8 @@
     function friendPlayers(){ return app.state.players.filter(p=>p.id!==app.myId); }
     function eventHudHtml(game){
       const ev = game?.event || { type:'none' };
-      const room = Number(game?.room || 1);
       const lines = [];
-      if(game?.prediction && Number(game.prediction.room) > room){
+      if(game?.prediction){
         const p = game.prediction;
         const label = EVENT_LABELS[p.type] || p.label || p.type || 'Evento';
         lines.push(`🔮: ${label} - Sala ${p.room}`);
@@ -201,33 +195,23 @@
       if(ev && ev.type !== 'none' && ev.type !== 'crystal'){
         lines.push(EVENT_LABELS[ev.type] || ev.label || ev.type);
       }
-      if(ev && ev.type === 'crystal' && ev.prediction && Number(ev.prediction.room) > room){
+      if(ev && ev.type === 'crystal' && ev.prediction && !game?.prediction){
         const label = EVENT_LABELS[ev.prediction.type] || ev.prediction.label || ev.prediction.type || 'Evento';
         lines.push(`🔮: ${label} - Sala ${ev.prediction.room}`);
       }
       if(!lines.length) lines.push('Evento: Sala silenciosa');
       return lines.map(escapeHtml).join('<br>');
     }
-    
-    function updateDashButtonVisibility(){
-      const btn=$('dashBtn');
-      if(!btn) return;
-      const playing=(app.state.game?.mode)==='playing';
-      btn.classList.toggle('hidden', !(playing && currentHero()==='shadow'));
-    }
-
     function updateScreensFromState(){ const game=app.state.game||{}; $('lobbyCode').textContent=app.roomCode||'---'; $('lobbyMsg').textContent=game.message||'Aguardando jogadores...'; $('roomLabel').textContent=`Cyberpunk • Sala ${game.room||1}`; $('eventLabel').innerHTML=eventHudHtml(game); $('connLabel').textContent=app.connected?'online':'offline'; $('pingLabel').textContent=app.ping?app.ping+' ms':'-- ms'; renderLobbyPlayers(); renderPlayersHud(); updateDeadOverlay(); const hide=game.mode!=='playing'; $('gameHud').classList.toggle('hidden',hide); $('controlsLayer').classList.toggle('hidden',hide); const me=myServerPlayer(); $('startBtn').textContent=me?.ready?'Aguardando amigo...':'Começar'; if(game.mode==='playing'){ if(me && !app._syncedStart){ app.player.x=me.x; app.player.y=me.y; app.player.vx=0; app.player.vy=0; app._syncedStart=true; enterImmersiveLandscape(); } showScreen(null); } else { app._syncedStart=false; if(game.mode==='post'){ $('postMsg').textContent=game.message||'Fim da tentativa.'; $('postStats').textContent=`Chegaram até a sala ${game.room||1}. Avanços: ${game.stats?.advances||0}. Mortes: ${game.stats?.deaths||0}.`; showScreen('postScreen'); } else if(app.connected) showScreen('lobbyScreen'); else showScreen('menuScreen'); } }
     function renderHeroCards(containerId){ const box=$(containerId); box.innerHTML=''; for(const [key,h] of Object.entries(HEROES)){ const card=document.createElement('button'); card.className='hero-card'+(app.selectedHero===key?' selected':''); card.innerHTML=`<img src="${AS+h.preview}" alt=""><div><strong>${h.label}</strong><br><span>${h.role}</span></div>`; card.onclick=()=>{ app.selectedHero=key; try{localStorage.setItem('mavCoopHero',key);}catch{} renderHeroCards('lobbyHeroPicker'); updateSelectedHeroStatus(); send({type:'selectHero', hero:key}); }; box.appendChild(card); } }
     function updateSelectedHeroStatus(){ const h=HEROES[app.selectedHero]||HEROES.votenot; $('selectedHeroStatus').textContent=`Personagem atual: ${h.label} • ${h.role}`; }
     function renderEventBanner(){
       const game = app.state.game || {};
       const ev = game.event || {type:'none'};
-      const room = Number(game.room || 1);
       const box = $('eventBanner');
-      const hasFuturePrediction = !!(game.prediction && Number(game.prediction.room) > room);
-      if(game.mode !== 'playing' || ((!ev || ev.type === 'none') && !hasFuturePrediction)){ box.style.display='none'; return; }
+      if(game.mode !== 'playing' || ((!ev || ev.type === 'none') && !game.prediction)){ box.style.display='none'; return; }
       const lines = [];
-      if(hasFuturePrediction){
+      if(game.prediction){
         const p = game.prediction;
         lines.push(`<b>🔮 ${EVENT_LABELS[p.type]||p.type} - Sala ${p.room}</b>`);
       }
@@ -235,7 +219,7 @@
         let detail = '';
         if(ev.type==='fire') detail = `Saia em até ${Math.max(0,Math.ceil(5-eventSeconds()))}s ou morre`;
         else if(ev.type==='scalding') detail = 'Chão laranja causa dano. Defenda ou corra';
-        else if(ev.type==='kronos'){ const total=(app.eventRuntime.runes||ev.runes||[]).length||0; detail = `Colete as runas • ${app.eventRuntime.runesCollected||0}/${total} • pulo x1.5`; }
+        else if(ev.type==='kronos'){ const total=(app.eventRuntime.runes||ev.runes||[]).length||0; detail = `Colete as runas • ${app.eventRuntime.runesCollected||0}/${total} • pulo x1.25`; }
         else if(ev.type==='matteus') detail = app.eventRuntime.healDone ? 'A névoa se dissipou' : `Aguente ${Math.max(0,Math.ceil(5-eventSeconds()))}s para receber cura`;
         else if(ev.type==='rocket') detail = 'Defenda o foguete do Astro no momento certo';
         else if(ev.type==='laura') detail = 'Laura está perseguindo a dupla pelo corredor';
@@ -244,11 +228,10 @@
         else if(ev.type==='akane') detail = ev.mode==='heal'?'Akane pode curar a dupla':'Akane pode causar dano';
         else if(ev.type==='areia') detail = 'A areia puxa e causa dano se você ficar no chão';
         else if(ev.type==='timao') detail = 'Timão avançará a sala automaticamente';
-        else if(ev.type==='storm') detail='Nuvens carregadas: 20% de chance de raio por segundo';
         else if(ev.type==='other') detail = 'Pequeno respiro antes do próximo perigo';
         else if(ev.type==='wardenBoss') detail = 'Desvie dos raios e sobreviva';
         lines.push(`<b>${escapeHtml(EVENT_LABELS[ev.type]||ev.label||ev.type)}</b>${detail?`<br><span>${escapeHtml(detail)}</span>`:''}`);
-      } else if(ev?.type==='crystal' && ev.prediction && Number(ev.prediction.room) > room && !hasFuturePrediction){
+      } else if(ev?.type==='crystal' && ev.prediction && !game.prediction){
         lines.push(`<b>🔮 ${escapeHtml(EVENT_LABELS[ev.prediction.type]||ev.prediction.type)} - Sala ${ev.prediction.room}</b>`);
       }
       box.innerHTML = lines.join('<hr style="border:0;border-top:1px solid rgba(255,255,255,.15);margin:5px 0">');
@@ -262,8 +245,8 @@
     function currentHero(){ const me=myServerPlayer(); return me?.hero || app.selectedHero || 'votenot'; }
     function eventType(){ return app.state.game?.event?.type || 'none'; }
     function isRoomLocked(){ return eventType()==='kronos' && !app.eventRuntime.kronosCleared; }
-    function step(dt){ const game=app.state.game||{}; const me=myServerPlayer(); if(game.mode!=='playing'||!me||!me.alive||me.out)return; const stunned = performance.now() < (app.stunUntil||0); const slow = eventType()==='web' ? .7 : (eventType()==='areia'||eventType()==='quicksand') ? .72 : 1; const heroSpeed = currentHero()==='shadow' ? 1.02 : 1; const speed=(app.input.defend?95:210)*slow*heroSpeed; let vx=0; const nowDash=performance.now(); const dashing=nowDash<(app.dashUntil||0); if(currentHero()==='shadow'&&app.input.dash&&!stunned&&nowDash-(app.lastDashAt||0)>900){ app.lastDashAt=nowDash; app.dashUntil=nowDash+170; toast('Shadow dash!'); } if(!stunned){ if(app.input.left)vx-=speed; if(app.input.right)vx+=speed; } if(dashing){ vx=app.player.dir*620; } app.player.vx=stunned?0:vx; if(app.input.jump&&app.player.grounded&&!app.input.defend&&!stunned){ app.player.vy = eventType()==='kronos' ? -840 : -560; app.player.grounded=false; } app.player.vy+=1500*dt; app.player.x+=app.player.vx*dt; app.player.y+=app.player.vy*dt; if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; } app.player.x=Math.max(38,Math.min(924,app.player.x)); app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir; app.player.defending=app.input.defend; app.player.anim=app.input.defend?'defense':!app.player.grounded?'jump':Math.abs(app.player.vx)>3?'walk':'idle'; handleEventHazard(dt,game,me); const t=performance.now(); if(app.player.x>EXIT_X && !isRoomLocked() && t-app.lastAdvanceAt>900){ app.lastAdvanceAt=t; send({type:'advanceRoom'}); } if(t-app.lastPosSent>100){ app.lastPosSent=t; send({type:'position', x:app.player.x, y:app.player.y, vx:app.player.vx, vy:app.player.vy, dir:app.player.dir, anim:app.player.anim, defending:app.player.defending}); } }
-    function damage(amount,reason){ const t=performance.now(); if(t-app.lastDamageAt<500)return; app.lastDamageAt=t; const finalAmount = currentHero()==='shadow' ? Math.max(1, amount*0.93) : amount; send({type:'damage', amount:finalAmount, reason}); }
+    function step(dt){ const game=app.state.game||{}; const me=myServerPlayer(); if(game.mode!=='playing'||!me||!me.alive||me.out)return; const stunned = performance.now() < (app.stunUntil||0); const slow = eventType()==='web' ? .7 : (eventType()==='areia'||eventType()==='quicksand') ? .72 : 1; const heroSpeed = currentHero()==='shadow' ? 1.15 : 1; const speed=(app.input.defend?95:210)*slow*heroSpeed; let vx=0; if(!stunned){ if(app.input.left)vx-=speed; if(app.input.right)vx+=speed; } app.player.vx=stunned?0:vx; if(app.input.jump&&app.player.grounded&&!app.input.defend&&!stunned){ app.player.vy = eventType()==='kronos' ? -840 : -560; app.player.grounded=false; } app.player.vy+=1500*dt; app.player.x+=app.player.vx*dt; app.player.y+=app.player.vy*dt; if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; } app.player.x=Math.max(38,Math.min(924,app.player.x)); app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir; app.player.defending=app.input.defend; app.player.anim=app.input.defend?'defense':!app.player.grounded?'jump':Math.abs(app.player.vx)>3?'walk':'idle'; handleEventHazard(dt,game,me); const t=performance.now(); if(app.player.x>EXIT_X && !isRoomLocked() && t-app.lastAdvanceAt>900){ app.lastAdvanceAt=t; send({type:'advanceRoom'}); } if(t-app.lastPosSent>100){ app.lastPosSent=t; send({type:'position', x:app.player.x, y:app.player.y, vx:app.player.vx, vy:app.player.vy, dir:app.player.dir, anim:app.player.anim, defending:app.player.defending}); } }
+    function damage(amount,reason){ const t=performance.now(); if(t-app.lastDamageAt<500)return; app.lastDamageAt=t; const finalAmount = currentHero()==='shadow' ? Math.max(1, amount*0.98) : amount; send({type:'damage', amount:finalAmount, reason}); }
     function heal(amount){ send({type:'heal', amount}); }
     function eventSeconds(){ return (performance.now()-(app.eventRuntime.startedLocal||performance.now()))/1000; }
     function handleEventHazard(dt, game, me){ const ev=game.event||{type:'none'}; const rt=app.eventRuntime; const t=eventSeconds(); if(ev.type==='akane'&&!rt.damageDone&&!rt.healDone&&t>1.0){ if(ev.mode==='heal'){ rt.healDone=true; heal(30); toast('Akane curou você.'); } else { rt.damageDone=true; damage(Math.max(1,(me.hp||100)*0.25),'Akane'); toast('Akane feriu você.'); } }
@@ -318,20 +301,7 @@
     }
     function roomImage(){ const r=app.state.game?.room||1; const n=((r-1)%30)+1; return `room_${String(n).padStart(2,'0')}.png`; }
     function draw(){ ctx.clearRect(0,0,W,H); const bg=imgs[roomImage()]||imgs['room_01.png']; if(bg&&bg.complete&&bg.naturalWidth) ctx.drawImage(bg,0,0,W,H); else { const g=ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,'#0b203b'); g.addColorStop(1,'#070a16'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); } ctx.fillStyle='rgba(0,0,0,.20)'; ctx.fillRect(0,0,W,H); drawGround(); drawEventLayer(); drawExit(); drawPlayers(); drawEffects(); if(performance.now()<app.toastUntil) $('toast').style.display='block'; else $('toast').style.display='none'; }
-    function drawGround(){
-      const gy=GROUND_Y;
-      const grad=ctx.createLinearGradient(0,gy,0,H);
-      grad.addColorStop(0,'rgba(30,210,255,.16)');
-      grad.addColorStop(1,'rgba(5,15,30,.72)');
-      ctx.fillStyle=grad;
-      ctx.fillRect(0,gy,W,H-gy);
-      ctx.fillStyle='rgba(220,245,255,.30)';
-      ctx.fillRect(0,gy-3,W,3);
-      for(let x=0;x<W;x+=64){
-        ctx.fillStyle='rgba(255,255,255,.05)';
-        ctx.fillRect(x,gy+10,34,3);
-      }
-    }
+    function drawGround(){ const gy=GROUND_Y+8; const grad=ctx.createLinearGradient(0,gy,0,H); grad.addColorStop(0,'rgba(30,210,255,.16)'); grad.addColorStop(1,'rgba(5,15,30,.72)'); ctx.fillStyle=grad; ctx.fillRect(0,gy,W,H-gy); ctx.fillStyle='rgba(220,245,255,.24)'; ctx.fillRect(0,gy-4,W,4); for(let x=0;x<W;x+=64){ ctx.fillStyle='rgba(255,255,255,.05)'; ctx.fillRect(x,gy+10,34,3); } }
     function drawExit(){ /* saída invisível: avanço continua quando o jogador chega ao lado direito */ }
     function drawEventLayer(){ const ev=app.state.game?.event||{type:'none'}; const rt=app.eventRuntime; if(ev.type==='areia'){ ctx.fillStyle='rgba(170,125,55,.18)'; ctx.fillRect(0,GROUND_Y-10,W,70); for(let x=0;x<W;x+=50){ ctx.fillStyle='rgba(255,230,150,.12)'; ctx.beginPath(); ctx.ellipse(x,GROUND_Y+18,30,7,0,0,Math.PI*2); ctx.fill(); } }
       if(ev.type==='web'){ ctx.save(); ctx.globalAlpha=.78; ctx.strokeStyle='rgba(225,240,255,.30)'; ctx.lineWidth=2; for(let x=40;x<W;x+=70){ ctx.beginPath(); ctx.moveTo(x,70); ctx.lineTo(x,H); ctx.stroke(); } for(let y=95;y<H;y+=58){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); } ctx.strokeStyle='rgba(255,255,255,.16)'; ctx.lineWidth=1; for(let i=0;i<9;i++){ ctx.beginPath(); ctx.moveTo(i*115,80); ctx.lineTo(W-i*70,H); ctx.stroke(); } ctx.restore(); }
@@ -453,33 +423,11 @@
     function spriteFor(hero,anim,t){ const h=HEROES[hero]||HEROES.votenot; if(anim==='defense')return h.defense; if(anim==='jump')return h.jump; if(anim==='down')return h.down; if(anim==='walk')return h.walk[Math.floor(t*10)%h.walk.length]; return h.idle; }
     function drawLocalPlayer(me){ const file=spriteFor(me.hero,app.player.anim,performance.now()/1000); drawSprite(file,app.player.x,app.player.y,app.player.dir,me.name,!me.alive||me.out,me.defending,me.hero); }
     function drawServerPlayer(p){ drawSprite(spriteFor(p.hero,p.anim||'idle',performance.now()/1000),p.x,p.y,p.dir,p.name,!p.alive||p.out,p.defending,p.hero); }
-
-    function spriteAlphaBox(file, img){
-      if(spriteTrimCache[file]) return spriteTrimCache[file];
-      if(!img || !img.complete || !img.naturalWidth) return {sx:0,sy:0,sw:1,sh:1};
-      const c=document.createElement('canvas');
-      c.width=img.naturalWidth; c.height=img.naturalHeight;
-      const cx=c.getContext('2d',{willReadFrequently:true});
-      cx.drawImage(img,0,0);
-      let data;
-      try{ data=cx.getImageData(0,0,c.width,c.height).data; }catch{ return {sx:0,sy:0,sw:img.naturalWidth,sh:img.naturalHeight}; }
-      let minX=c.width, minY=c.height, maxX=-1, maxY=-1;
-      for(let y=0;y<c.height;y++){
-        for(let x=0;x<c.width;x++){
-          const i=(y*c.width+x)*4;
-          if(data[i+3]>12){
-            if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y;
-          }
-        }
-      }
-      const box = maxX<0 ? {sx:0,sy:0,sw:img.naturalWidth,sh:img.naturalHeight} : {sx:minX,sy:minY,sw:maxX-minX+1,sh:maxY-minY+1};
-      spriteTrimCache[file]=box;
-      return box;
-    }
-
     function drawSprite(file,x,y,dir,name,ghost,def,hero){
       const img=imgs[file];
-      const targetH=hero==='astro'?132:126;
+      const baseW=88, baseH=118;
+      const visualScale=hero==='astro'?1.05:1;
+      const w=baseW*visualScale, h=baseH*visualScale;
       ctx.save();
       ctx.globalAlpha=ghost?.45:1;
       ctx.translate(x,y);
@@ -502,14 +450,10 @@
         ctx.fill();
       }
       if(img&&img.complete&&img.naturalWidth){
-        const b=spriteAlphaBox(file,img);
-        const scale=targetH/Math.max(1,b.sh);
-        const w=b.sw*scale;
-        const h=b.sh*scale;
-        ctx.drawImage(img,b.sx,b.sy,b.sw,b.sh,-w/2,-h,w,h);
+        ctx.drawImage(img,-w/2,-h,w,h);
       } else {
         ctx.fillStyle=hero==='shadow'?'#2d35ff':'#00eaff';
-        ctx.fillRect(-22,-126,44,126);
+        ctx.fillRect(-baseW/4,-baseH,baseW/2,baseH);
       }
       if(def){
         ctx.save();
@@ -541,10 +485,10 @@
           ctx.ellipse(0,-8,12,31,0,0,Math.PI*2);
           ctx.stroke();
         } else if(hero==='shadow'){
-          ctx.shadowColor='#ffffff';
+          ctx.shadowColor='#6d7cff';
           ctx.shadowBlur=18;
-          ctx.fillStyle='rgba(255,255,255,.30)';
-          ctx.strokeStyle='rgba(255,255,255,.96)';
+          ctx.fillStyle='rgba(80,90,255,.28)';
+          ctx.strokeStyle='rgba(170,180,255,.95)';
           ctx.lineWidth=3;
           ctx.beginPath();
           ctx.moveTo(-8,-48);
@@ -576,12 +520,12 @@
       ctx.fillStyle='#fff';
       ctx.font='800 13px Arial';
       ctx.textAlign='center';
-      ctx.fillText(name,x,y-132);
+      ctx.fillText(name,x,y-h-8);
       ctx.textAlign='start';
     }
     function loop(t){ const dt=Math.min(.033,(t-app.perf.last)/1000||.016); app.perf.last=t; step(dt); draw(); requestAnimationFrame(loop); }
     function bindHold(id,down,up){ const el=$(id); let activePointer=null; const release=(e)=>{ if(activePointer===null) return; if(e && e.pointerId!=null && e.pointerId!==activePointer) return; activePointer=null; up(); }; const press=(e)=>{ e.preventDefault(); activePointer=(e.pointerId ?? 'mouse'); down(); try{ el.setPointerCapture(e.pointerId); }catch{} }; el.addEventListener('pointerdown', press, {passive:false}); el.addEventListener('pointerup', release, {passive:false}); document.addEventListener('pointerup', release, {passive:false}); window.addEventListener('blur', ()=>{ activePointer=null; up(); }); }
-    function setupControls(){ bindHold('leftBtn',()=>app.input.left=true,()=>app.input.left=false); bindHold('rightBtn',()=>app.input.right=true,()=>app.input.right=false); bindHold('jumpBtn',()=>app.input.jump=true,()=>app.input.jump=false); bindHold('defBtn',()=>app.input.defend=true,()=>app.input.defend=false); bindHold('dashBtn',()=>{ if(currentHero()==='shadow') app.input.dash=true; },()=>app.input.dash=false); $('exitBtn').addEventListener('pointerdown',()=>send({type:'quitRun'})); $('quitDeadBtn').onclick=()=>send({type:'quitRun'}); window.addEventListener('keydown',e=>{ if(['ArrowLeft','a','A'].includes(e.key))app.input.left=true; if(['ArrowRight','d','D'].includes(e.key))app.input.right=true; if(['ArrowUp','w','W',' '].includes(e.key))app.input.jump=true; if(['s','S','ArrowDown'].includes(e.key))app.input.defend=true; }); window.addEventListener('keyup',e=>{ if(['ArrowLeft','a','A'].includes(e.key))app.input.left=false; if(['ArrowRight','d','D'].includes(e.key))app.input.right=false; if(['ArrowUp','w','W',' '].includes(e.key))app.input.jump=false; if(['s','S','ArrowDown'].includes(e.key))app.input.defend=false; }); }
+    function setupControls(){ bindHold('leftBtn',()=>app.input.left=true,()=>app.input.left=false); bindHold('rightBtn',()=>app.input.right=true,()=>app.input.right=false); bindHold('jumpBtn',()=>app.input.jump=true,()=>app.input.jump=false); bindHold('defBtn',()=>app.input.defend=true,()=>app.input.defend=false); $('exitBtn').addEventListener('pointerdown',()=>send({type:'quitRun'})); $('quitDeadBtn').onclick=()=>send({type:'quitRun'}); window.addEventListener('keydown',e=>{ if(['ArrowLeft','a','A'].includes(e.key))app.input.left=true; if(['ArrowRight','d','D'].includes(e.key))app.input.right=true; if(['ArrowUp','w','W',' '].includes(e.key))app.input.jump=true; if(['s','S','ArrowDown'].includes(e.key))app.input.defend=true; }); window.addEventListener('keyup',e=>{ if(['ArrowLeft','a','A'].includes(e.key))app.input.left=false; if(['ArrowRight','d','D'].includes(e.key))app.input.right=false; if(['ArrowUp','w','W',' '].includes(e.key))app.input.jump=false; if(['s','S','ArrowDown'].includes(e.key))app.input.defend=false; }); }
     
     async function enterImmersiveLandscape(){
       try {
