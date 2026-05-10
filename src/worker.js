@@ -438,4 +438,100 @@ export class MatchRoom extends DurableObject {
 
   shadowAbility(p, slot, dir) {
     if (slot === "basic") { const px = p.x + dir.x * 48, py = p.y + dir.y * 48; this.damageArea(px, py, 44, p.team, 15, "katana"); this.effects.push({ id: randId("fx"), kind: "slash", x: px, y: py, color: "#b9c4ff", life: 260, created: nowMs() }); return; }
-    if (slot === "skill1") { p.x = clamp(p.x + dir.x * 92
+    if (slot === "skill1") { p.x = clamp(p.x + dir.x * 92, 45, MAP.width - 45); p.y = clamp(p.y + dir.y * 92, 75, MAP.height - 75); this.damageArea(p.x + dir.x * 34, p.y + dir.y * 34, 55, p.team, 23, "dash-cut"); this.effects.push({ id: randId("fx"), kind: "dash", x: p.x, y: p.y, color: "#7e8cff", life: 420, created: nowMs() }); return; }
+    if (slot === "skill2") { p.stealthUntil = nowMs() + 2600; p.speedBoostUntil = nowMs() + 2600; p.shield = Math.min(32, p.shield + 18); this.effects.push({ id: randId("fx"), kind: "cloak", x: p.x, y: p.y, color: "#5960ff", life: 800, created: nowMs() }); return; }
+    if (slot === "ult") this.spawnProjectile({ owner: p.id, team: p.team, x: p.x + dir.x * 28, y: p.y + dir.y * 28, dir, speed: 520, damage: 32, radius: 18, life: 720, color: "#c6d0ff", kind: "moon-slash" });
+  }
+
+  spawnProjectile({ owner, team, x, y, dir, speed, damage, radius, life, color, kind, lifesteal = 0, slow = false }) {
+    if (this.projectiles.length >= MAX_PROJECTILES) this.projectiles.shift();
+    const n = norm(dir.x, dir.y);
+    this.projectiles.push({ id: randId("pr"), owner, team, x, y, vx: n.x * speed, vy: n.y * speed, damage, radius, life, color, kind, lifesteal, slow, alive: true });
+  }
+
+  addZone({ team, x, y, radius, damage = 0, heal = 0, duration = 1000, pulseMs = 350, color = "#fff", kind = "zone", slow = false }) {
+    if (this.zones.length >= MAX_ZONES) this.zones.shift();
+    const t = nowMs();
+    this.zones.push({ id: randId("z"), team, x: clamp(x, 30, MAP.width - 30), y: clamp(y, 55, MAP.height - 55), radius, damage, heal, expires: t + duration, nextPulse: t, pulseMs, color, kind, slow, alive: true });
+  }
+
+  damageArea(x, y, radius, team, damage, kind) {
+    for (const target of this.getAllTargets()) if (target.team !== team && !(target.type === "player" && target.dead) && dist2({ x, y }, target) <= (radius + (target.radius || 18)) ** 2) this.damageTarget(target, damage, team, kind);
+  }
+
+  findProjectileHit(pr) {
+    for (const target of this.getAllTargets()) {
+      if (target.team === pr.team) continue;
+      if (target.type === "player" && target.dead) continue;
+      if (!target.alive && target.type !== "player") continue;
+      const r = pr.radius + (target.radius || 18);
+      if (dist2(pr, target) <= r * r) return target;
+    }
+    return null;
+  }
+
+  findNearestTarget(origin, team, range) {
+    let best = null, bestD = range * range;
+    for (const target of this.getAllTargets()) {
+      if (target.team !== team) continue;
+      if (target.type === "player" && target.dead) continue;
+      if (!target.alive && target.type !== "player") continue;
+      const d = dist2(origin, target);
+      if (d < bestD) { bestD = d; best = target; }
+    }
+    return best;
+  }
+
+  getAllTargets() {
+    const out = [];
+    for (const p of this.players.values()) out.push({ ...p, type: "player", radius: 18, alive: !p.dead });
+    for (const m of this.minions) if (m.alive) out.push(m);
+    for (const t of this.towers) if (t.alive) out.push(t);
+    if (this.cores.blue.alive) out.push(this.cores.blue);
+    if (this.cores.red.alive) out.push(this.cores.red);
+    return out;
+  }
+
+  damageTarget(target, amount, sourceTeam, kind) {
+    if (amount <= 0) return;
+    const t = nowMs();
+    if (target.type === "player") {
+      const p = this.players.get(target.id);
+      if (!p || p.dead) return;
+      let remaining = amount;
+      if (p.shield > 0) { const used = Math.min(p.shield, remaining); p.shield -= used; remaining -= used; }
+      p.hp -= remaining;
+      if (p.hp <= 0) { p.hp = 0; p.dead = true; p.respawnAt = t + 4200; this.effects.push({ id: randId("fx"), kind: "death", x: p.x, y: p.y, color: "#ffffff", life: 900, created: t }); }
+      return;
+    }
+    target.hp -= amount;
+    if (target.hp <= 0) { target.hp = 0; target.alive = false; this.effects.push({ id: randId("fx"), kind: "break", x: target.x, y: target.y, color: sourceTeam === "blue" ? "#00d8ff" : "#ff4655", life: 650, created: t }); }
+    if (target.type === "tower") { const realTower = this.towers.find((x) => x.id === target.id); if (realTower) { realTower.hp = target.hp; realTower.alive = target.alive; } }
+    if (target.type === "core") { const core = this.cores[target.team]; core.hp = target.hp; core.alive = target.alive; }
+  }
+
+  buildState() {
+    const t = nowMs();
+    return {
+      time: t, room: this.roomCode, map: MAP, phase: this.phase, winner: this.winner,
+      players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, hero: p.hero, heroLabel: p.heroLabel, team: p.team, x: Math.round(p.x), y: Math.round(p.y), hp: Math.round(p.hp), maxHp: p.maxHp, shield: Math.round(p.shield), dead: p.dead, ready: p.ready, stealth: t < p.stealthUntil, cooldowns: { basic: Math.max(0, p.cooldowns.basic - t), skill1: Math.max(0, p.cooldowns.skill1 - t), skill2: Math.max(0, p.cooldowns.skill2 - t), ult: Math.max(0, p.cooldowns.ult - t) } })),
+      minions: this.minions.map((m) => ({ id: m.id, team: m.team, x: Math.round(m.x), y: Math.round(m.y), hp: Math.round(m.hp), maxHp: m.maxHp })),
+      projectiles: this.projectiles.map((pr) => ({ id: pr.id, team: pr.team, x: Math.round(pr.x), y: Math.round(pr.y), radius: pr.radius, color: pr.color, kind: pr.kind })),
+      zones: this.zones.map((z) => ({ id: z.id, team: z.team, x: Math.round(z.x), y: Math.round(z.y), radius: z.radius, color: z.color, kind: z.kind, expires: z.expires })),
+      towers: this.towers.map((tw) => ({ id: tw.id, team: tw.team, x: tw.x, y: tw.y, hp: Math.round(tw.hp), maxHp: tw.maxHp, alive: tw.alive })),
+      cores: this.cores,
+      effects: this.effects.map((fx) => ({ id: fx.id, kind: fx.kind, x: Math.round(fx.x), y: Math.round(fx.y), color: fx.color, life: fx.life, created: fx.created }))
+    };
+  }
+
+  send(ws, msg) {
+    try { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); } catch {}
+  }
+
+  broadcast(msg) {
+    const data = JSON.stringify(msg);
+    for (const ws of this.sessions.keys()) {
+      try { if (ws.readyState === WebSocket.OPEN) ws.send(data); } catch {}
+    }
+  }
+}
