@@ -10,7 +10,7 @@
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #050812; color: #fff; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     button, input { font: inherit; }
     #shell { width: 100vw; height: 100vh; overflow: hidden; display: grid; place-items: center; background: radial-gradient(circle at 40% 10%, #14345c, #050812 68%); }
-    #stage { position: relative; width: min(100vw, calc(100vh * 16 / 9)); height: min(100vh, calc(100vw * 9 / 16)); max-width: 100vw; max-height: 100vh; overflow: hidden; border-radius: 18px; box-shadow: 0 0 35px rgba(0,0,0,.55); background: #070a16; }
+    #stage { position: relative; width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; overflow: hidden; border-radius: 0; box-shadow: 0 0 35px rgba(0,0,0,.55); background: #070a16; }
     body.force-landscape #stage { width: 100vh; height: 100vw; transform: rotate(90deg); transform-origin: center center; }
     canvas { width: 100%; height: 100%; display: block; background: #070a16; image-rendering: auto; }
     .screen { position: absolute; inset: 0; z-index: 20; display: none; padding: clamp(14px, 3vw, 28px); background: linear-gradient(135deg, rgba(4,6,17,.96), rgba(5,16,31,.94)); overflow: auto; }
@@ -34,6 +34,11 @@
     .btn.ready { background: linear-gradient(135deg, #18c965, #0aa86f); }
     .btn:disabled { opacity: .45; filter: grayscale(.5); }
     .status { padding: 10px 12px; border-radius: 14px; background: rgba(0,0,0,.34); border: 1px solid rgba(255,255,255,.12); color: rgba(255,255,255,.85); }
+    .menuActions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .hiddenPanel { display: none; }
+    .hiddenPanel.active { display: grid; }
+    #gameHud.hidden, .controlsLayer.hidden, .deadOverlay.hidden { display: none !important; }
+    .screen .panel { padding-block: 12px 30px; }
     #gameHud { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
     .topbar { position: absolute; left: 10px; right: 10px; top: 8px; display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; pointer-events: none; }
     .chip { padding: 8px 10px; border-radius: 14px; background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 8px 18px rgba(0,0,0,.22); font-size: 13px; max-width: 42%; }
@@ -76,7 +81,7 @@
   <div id="shell">
     <div id="stage">
       <canvas id="game" width="960" height="540"></canvas>
-      <div id="gameHud">
+      <div id="gameHud" class="hidden">
         <div class="topbar">
           <div class="chip"><b id="roomLabel">Cyberpunk • Sala 1</b><br><span id="eventLabel">Aguardando partida...</span></div>
           <div class="chip" id="playersHud"></div>
@@ -88,7 +93,7 @@
         <button class="smallBtn" id="landBtn">LAND</button>
       </div>
       <div id="toast"></div>
-      <div class="controlsLayer" id="controlsLayer">
+      <div class="controlsLayer hidden" id="controlsLayer">
         <div id="joy"><div id="stick"></div></div>
         <div class="actionPad">
           <button class="gameBtn" id="jumpBtn">PULAR</button>
@@ -106,17 +111,16 @@
         <div class="panel">
           <h1>MAVKaesu Coop</h1>
           <p>Modo padrão cooperativo: dois jogadores entram em Cyberpunk, avançam juntos de sala, e se um morrer o outro continua.</p>
-          <div class="status" id="menuStatus">Escolha personagem, crie uma sala ou entre por código.</div>
+          <div class="status" id="menuStatus">Digite seu nome, crie uma sala ou entre por código.</div>
           <div class="row">
             <input id="nameInput" maxlength="18" placeholder="Digite seu nome" autocomplete="off" />
             <input class="roomInput" id="roomInput" maxlength="18" placeholder="Código da sala" autocomplete="off" />
           </div>
-          <div class="grid" id="heroGrid"></div>
-          <div class="row">
+          <div class="menuActions">
             <button class="btn" id="createBtn">Criar sala</button>
             <button class="btn secondary" id="joinBtn">Entrar na sala</button>
           </div>
-          <p class="status">Dica: mande o mesmo link e o código da sala para seu amigo. Esta build usa WebSocket puro, sem Socket.IO.</p>
+          <p class="status">Depois de entrar na sala, você verá os botões de COMEÇAR e ESCOLHER PERSONAGEM.</p>
         </div>
       </section>
       <section class="screen" id="lobbyScreen">
@@ -124,12 +128,14 @@
           <h1>Sala <span id="lobbyCode">---</span></h1>
           <p id="lobbyMsg">Aguardando jogadores...</p>
           <div class="status" id="lobbyPlayers"></div>
-          <div class="grid" id="lobbyHeroGrid"></div>
           <div class="row">
-            <button class="btn ready" id="readyBtn">PRONTO</button>
+            <button class="btn ready" id="startBtn">Começar</button>
+            <button class="btn secondary" id="chooseHeroBtn">Escolher personagem</button>
             <button class="btn secondary" id="copyBtn">Copiar código</button>
             <button class="btn danger" id="leaveBtn">Sair da sala</button>
           </div>
+          <div class="status" id="selectedHeroStatus">Personagem atual: VotenoT</div>
+          <div class="grid hiddenPanel" id="lobbyHeroPicker"></div>
         </div>
       </section>
       <section class="screen" id="postScreen">
@@ -299,6 +305,8 @@
       ws.onopen = () => {
         app.connected = true;
         send({ type: 'join', clientId: app.clientId, name: $('nameInput').value || 'Jogador', hero: app.selectedHero });
+        $('lobbyHeroPicker').classList.remove('active');
+        updateSelectedHeroStatus();
         showScreen('lobbyScreen');
         toast('Conectado à sala ' + code + '.');
       };
@@ -306,6 +314,9 @@
       ws.onclose = () => {
         app.connected = false;
         $('connLabel').textContent = 'desconectado';
+        $('gameHud').classList.add('hidden');
+        $('controlsLayer').classList.add('hidden');
+        showScreen('menuScreen');
         toast('Conexão fechada. Reabra a sala se necessário.', 3500);
       };
       ws.onerror = () => toast('Erro no WebSocket. Confira o deploy do Worker.', 3500);
@@ -364,6 +375,12 @@
       renderLobbyPlayers();
       renderPlayersHud();
       updateDeadOverlay();
+      const chromeHidden = game.mode !== 'playing';
+      $('gameHud').classList.toggle('hidden', chromeHidden);
+      $('controlsLayer').classList.toggle('hidden', chromeHidden);
+
+      const meState = myServerPlayer();
+      $('startBtn').textContent = meState?.ready ? 'Aguardando amigo...' : 'Começar';
 
       if (game.mode === 'playing') {
         for (const s of app.state.players) {
@@ -397,12 +414,18 @@
         card.onclick = () => {
           app.selectedHero = key;
           localStorage.setItem('mavCoopHero', key);
-          renderHeroCards('heroGrid');
-          renderHeroCards('lobbyHeroGrid');
+          renderHeroCards('lobbyHeroPicker');
+          updateSelectedHeroStatus();
+          updateSelectedHeroStatus();
           send({ type: 'selectHero', hero: key });
         };
         box.appendChild(card);
       }
+    }
+
+    function updateSelectedHeroStatus() {
+      const h = HEROES[app.selectedHero] || HEROES.votenot;
+      $('selectedHeroStatus').textContent = `Personagem atual: ${h.label} • ${h.role}`;
     }
 
     function renderLobbyPlayers() {
@@ -734,10 +757,12 @@
     }
 
     function setupUI() {
-      renderHeroCards('heroGrid'); renderHeroCards('lobbyHeroGrid');
+      renderHeroCards('lobbyHeroPicker');
+      updateSelectedHeroStatus();
       $('createBtn').onclick = () => connect(randomRoomCode());
       $('joinBtn').onclick = () => connect($('roomInput').value);
-      $('readyBtn').onclick = () => send({ type: 'ready', ready: true });
+      $('startBtn').onclick = () => { const me = myServerPlayer(); send({ type: 'ready', ready: !(me && me.ready) }); };
+      $('chooseHeroBtn').onclick = () => { $('lobbyHeroPicker').classList.toggle('active'); };
       $('copyBtn').onclick = async () => { try { await navigator.clipboard.writeText(app.roomCode); toast('Código copiado.'); } catch { toast('Código: ' + app.roomCode); } };
       $('leaveBtn').onclick = () => { send({ type: 'leaveRoom' }); location.reload(); };
       $('againBtn').onclick = () => send({ type: 'again' });
@@ -746,8 +771,7 @@
         try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); else await document.exitFullscreen(); } catch { toast('Seu navegador bloqueou o modo imersivo.'); }
       };
       $('landBtn').onclick = () => { document.body.classList.toggle('force-landscape'); toast(document.body.classList.contains('force-landscape') ? 'Landscape visual ativado.' : 'Landscape visual desativado.'); };
-      $('nameInput').value = localStorage.getItem('mavCoopName') || '';
-      $('nameInput').addEventListener('input', () => { try { localStorage.setItem('mavCoopName', $('nameInput').value); } catch {} });
+      $('nameInput').value = '';
     }
 
     setInterval(() => {
