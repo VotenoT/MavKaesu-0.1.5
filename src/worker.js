@@ -18,7 +18,7 @@ const CYBER_EVENTS = [
   { type: "storm", label: "Tempestade", weight: 5 },
   { type: "crystal", label: "Kayllane", weight: 6 },
   { type: "scalding", label: "Chão Escaldante", weight: 6 },
-  { type: "laura", label: "Laura", weight: 7 },
+  { type: "laura", label: "Laura", weight: 3 },
   { type: "akane", label: "Akane", weight: 9 },
   { type: "web", label: "Teia do Miranha", weight: 10 },
   { type: "maleta", label: "Chão do Maleta", weight: 8 },
@@ -354,7 +354,12 @@ export class MatchRoom extends DurableObject {
 
   damagePlayer(player, amount, reason) {
     if (!player.alive || player.out) return;
-    const dmg = player.defending ? Math.ceil(amount * 0.35) : amount;
+    if (player.hero === "votenot" && reason === "Sala em chamas") {
+      this.game.message = `${player.name} resistiu às chamas.`;
+      return;
+    }
+    const base = player.hero === "shadow" ? Math.max(0, amount * 0.98) : amount;
+    const dmg = player.defending ? Math.ceil(base * 0.35) : Math.ceil(base);
     player.hp = Math.max(0, player.hp - dmg);
     if (player.hp <= 0) {
       player.alive = false; player.deaths += 1; this.game.stats.deaths += 1;
