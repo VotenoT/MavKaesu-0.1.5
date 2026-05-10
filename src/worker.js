@@ -22,9 +22,9 @@ const CYBER_EVENTS = [
   { type: "web", label: "Teia do Miranha", weight: 10 },
   { type: "maleta", label: "Chão do Maleta", weight: 8 },
   { type: "rocket", label: "Foguete do Astro", weight: 21 },
-  { type: "other", label: "Outros eventos", weight: 10 },
+  { type: "other", label: "Sala silenciosa", weight: 10 },
   { type: "fire", label: "Sala em chamas", weight: 7 },
-  { type: "none", label: "Sala tranquila", weight: 0 }
+  { type: "none", label: "Sala silenciosa", weight: 0 }
 ];
 const PREDICTABLE = ["laura", "web", "fire", "scalding", "rocket", "kronos", "maleta", "akane", "matteus", "areia", "storm"];
 
@@ -315,7 +315,7 @@ export class MatchRoom extends DurableObject {
       return;
     }
     const rand = mulberry32(seed);
-    const picked = first ? { type: "none", label: "Sala tranquila" } : weightedPick(CYBER_EVENTS, rand);
+    const picked = first ? { type: "none", label: "Sala silenciosa" } : weightedPick(CYBER_EVENTS, rand);
     this.game.event = makeEvent(picked.type, room, seed, false);
     this.applyPersistentEventEffects();
     if (this.game.event.type === "timao") {
