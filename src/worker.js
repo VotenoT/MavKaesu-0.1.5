@@ -6,7 +6,8 @@ const STATE_THROTTLE_MS = 100;
 const HEROES = {
   votenot: { label: "VotenoT", maxHp: 100, skin: "player", color: "#ff7a1a" },
   astro: { label: "Astro", maxHp: 125, skin: "astro", color: "#bb6dff" },
-  rex: { label: "Rex", maxHp: 100, skin: "rex", color: "#7dff9d" }
+  rex: { label: "Rex", maxHp: 100, skin: "rex", color: "#7dff9d" },
+  shadow: { label: "Shadow", maxHp: 100, skin: "shadow", color: "#363bff" }
 };
 
 const CYBER_EVENTS = [
