@@ -1,4 +1,4 @@
-name = "mavkaesu-arena-015-ultra-stable"
+name = "mavkaesu0-1-5"
 main = "src/worker.js"
 compatibility_date = "2025-08-01"
 
