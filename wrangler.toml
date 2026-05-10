@@ -1,4 +1,4 @@
-name = "mavkaesu-arena-015-ultra-stable"
+name = "mavkaesu-coop-015"
 main = "src/worker.js"
 compatibility_date = "2025-08-01"
 
@@ -7,9 +7,9 @@ directory = "./public"
 binding = "ASSETS"
 
 [[durable_objects.bindings]]
-name = "MATCHROOM"
-class_name = "MatchRoom"
+name = "COOP_ROOM"
+class_name = "CoopRoom"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["MatchRoom"]
+new_sqlite_classes = ["CoopRoom"]
