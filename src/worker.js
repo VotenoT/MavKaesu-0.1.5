@@ -16,6 +16,7 @@ const CYBER_EVENTS = [
   { type: "timao", label: "Timão", weight: 4 },
   { type: "kronos", label: "Kronos", weight: 5 },
   { type: "storm", label: "Tempestade", weight: 5 },
+  { type: "breeze", label: "Brisa Celestial", weight: 5 },
   { type: "crystal", label: "Kayllane", weight: 6 },
   { type: "scalding", label: "Chão Escaldante", weight: 6 },
   { type: "laura", label: "Laura", weight: 3 },
@@ -27,7 +28,7 @@ const CYBER_EVENTS = [
   { type: "fire", label: "Sala em chamas", weight: 7 },
   { type: "none", label: "Sala silenciosa", weight: 0 }
 ];
-const PREDICTABLE = ["laura", "web", "fire", "scalding", "rocket", "kronos", "maleta", "akane", "matteus", "areia", "storm"];
+const PREDICTABLE = ["laura", "web", "fire", "scalding", "rocket", "kronos", "maleta", "akane", "matteus", "areia", "storm", "breeze"];
 
 const now = () => Date.now();
 function json(data, status = 200) {
@@ -63,6 +64,33 @@ function weightedPick(list, rand) {
   for (const e of list) { roll -= e.weight; if (roll <= 0) return e; }
   return list[0];
 }
+
+function roomVisualIndex(room) {
+  return ((Math.max(1, Number(room) || 1) - 1) % 30) + 1;
+}
+function roomWorld(room) {
+  const n = roomVisualIndex(room);
+  if (n <= 10) return "cyberpunk";
+  if (n <= 20) return "duneshade";
+  return "elyson";
+}
+function worldLabel(world) {
+  return world === "duneshade" ? "DuneShade" : world === "elyson" ? "Elyson" : "Cyberpunk";
+}
+function eventAllowedInWorld(type, world) {
+  if (type === "scalding" || type === "areia" || type === "quicksand") return world === "duneshade";
+  if (type === "storm" || type === "breeze") return world === "elyson";
+  return true;
+}
+function eventPoolForRoom(room) {
+  const world = roomWorld(room);
+  return CYBER_EVENTS.filter(e => eventAllowedInWorld(e.type, world));
+}
+function predictableForRoom(room) {
+  const world = roomWorld(room);
+  return PREDICTABLE.filter(type => eventAllowedInWorld(type, world));
+}
+
 function makeEvent(type, room, seed, forced = false) {
   const def = CYBER_EVENTS.find(e => e.type === type) || { type, label: type };
   const normalizedType = type === "other" ? "other" : type;
@@ -73,7 +101,8 @@ function makeEvent(type, room, seed, forced = false) {
   if (type === "wardenBoss") { event.label = "Warden"; event.hp = 200; event.maxHp = 200; event.marks = buildWardenMarks(seed, 0); }
   if (type === "crystal") {
     const future = room + 1 + ((seed + room * 11) % 5);
-    const predicted = PREDICTABLE[(seed + room * 19) % PREDICTABLE.length];
+    const list = predictableForRoom(future);
+    const predicted = list[(seed + room * 19) % Math.max(1, list.length)] || "web";
     event.prediction = { room: future, type: predicted };
   }
   return event;
@@ -92,6 +121,7 @@ function freshGame() {
   return {
     mode: "lobby",
     world: "cyberpunk",
+    worldLabel: "Cyberpunk",
     room: 1,
     runId: Math.random().toString(36).slice(2, 10),
     seed: Math.floor(Math.random() * 2 ** 31),
@@ -332,6 +362,8 @@ export class MatchRoom extends DurableObject {
 
   enterRoom(byName = "Sistema", first = false) {
     const room = this.game.room;
+    this.game.world = roomWorld(room);
+    this.game.worldLabel = worldLabel(this.game.world);
     const seed = this.game.seed + room * 7919 + this.game.stats.advances * 17;
     if (room === 50) {
       this.game.prediction = null;
@@ -358,7 +390,7 @@ export class MatchRoom extends DurableObject {
     if (this.game.prediction && this.game.prediction.room <= room) {
       const pred = this.game.prediction;
       this.game.prediction = null;
-      if (pred.room === room) {
+      if (pred.room === room && eventAllowedInWorld(pred.type, this.game.world)) {
         this.game.event = makeEvent(pred.type, room, seed, true);
         this.applyPersistentEventEffects();
         this.game.message = `A previsão da Kayllane se cumpriu: ${this.game.event.label}.`;
@@ -377,14 +409,15 @@ export class MatchRoom extends DurableObject {
       this.game.message = `O chão do Maleta ainda pulsa por ${this.game.maletaRoomsLeft + 1} sala(s).`;
       return;
     }
-    if (this.game.stormRoomsLeft > 0) {
+    if (this.game.stormRoomsLeft > 0 && eventAllowedInWorld("storm", this.game.world)) {
       this.game.event = makeEvent("storm", room, seed, true);
       this.game.stormRoomsLeft -= 1;
       this.game.message = this.game.stormRoomsLeft > 0 ? `A tempestade continua por mais ${this.game.stormRoomsLeft} sala(s).` : "A tempestade está se dissipando.";
       return;
     }
+    if (this.game.stormRoomsLeft > 0 && !eventAllowedInWorld("storm", this.game.world)) this.game.stormRoomsLeft = 0; // storm fora de Elyson
     const rand = mulberry32(seed);
-    const picked = first ? { type: "none", label: "Sala silenciosa" } : weightedPick(CYBER_EVENTS, rand);
+    const picked = first ? { type: "none", label: "Sala silenciosa" } : weightedPick(eventPoolForRoom(room), rand);
     this.game.event = makeEvent(picked.type, room, seed, false);
     this.applyPersistentEventEffects();
     if (this.game.event.type === "timao") {
