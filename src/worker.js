@@ -159,8 +159,19 @@ export class MatchRoom extends DurableObject {
     const session = { id: null, joinedAt: now(), lastSeen: now() };
     this.sessions.set(ws, session);
     ws.addEventListener("message", (event) => {
-      try { this.handle(ws, JSON.parse(event.data)); }
-      catch { this.send(ws, { type: "error", message: "Mensagem inválida." }); }
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        this.send(ws, { type: "error", message: "Mensagem inválida." });
+        return;
+      }
+      try {
+        this.handle(ws, data);
+      } catch (err) {
+        console.error("MatchRoom error", err?.stack || err);
+        this.send(ws, { type: "error", message: "Erro interno da sala. Atualize e tente novamente." });
+      }
     });
     ws.addEventListener("close", () => this.detach(ws));
     ws.addEventListener("error", () => this.detach(ws));
@@ -443,8 +454,47 @@ export class MatchRoom extends DurableObject {
     for (const p of Object.values(this.players)) { p.ready = false; p.alive = true; p.out = false; p.hp = HEROES[p.hero].maxHp; p.maxHp = HEROES[p.hero].maxHp; p.x = i === 0 ? 150 : 205; p.y = 420; p.vx = 0; p.vy = 0; p.dir = 1; p.anim = "idle"; p.defending = false; i++; }
   }
 
+
+  syncWardenState() {
+    const w = this.game.warden;
+    if (!w || this.game.room !== 50 || this.game.event?.type !== "wardenBoss") return;
+
+    if (w.defeated) {
+      if (this.game.event) {
+        this.game.event.hp = 0;
+        this.game.event.defeated = true;
+        this.game.event.marks = [];
+      }
+      return;
+    }
+
+    const t = now();
+    const seed = Number(w.seed || this.game.seed || 1);
+
+    if (!w.marksActive && w.nextMarksAt && t >= w.nextMarksAt) {
+      w.cycle = Number(w.cycle || 0) + 1;
+      w.marks = buildWardenMarks(seed, w.cycle);
+      w.marksActive = true;
+      w.lastMarkMoveAt = t;
+      w.nextMarksAt = 0;
+      this.game.message = "Novas marcas verdes apareceram no chão.";
+    } else if (w.marksActive && t - Number(w.lastMarkMoveAt || t) >= 5000) {
+      w.cycle = Number(w.cycle || 0) + 1;
+      w.marks = buildWardenMarks(seed, w.cycle);
+      w.lastMarkMoveAt = t;
+      this.game.message = "As marcas verdes mudaram de lugar.";
+    }
+
+    if (this.game.event) {
+      this.game.event.hp = w.hp;
+      this.game.event.maxHp = w.maxHp;
+      this.game.event.defeated = !!w.defeated;
+      this.game.event.marks = Array.isArray(w.marks) ? w.marks.map(m => ({ ...m })) : [];
+    }
+  }
+
   publicGame() {
-    this.syncWardenState();
+    if (typeof this.syncWardenState === "function") this.syncWardenState();
     return { ...this.game, event: this.game.event ? { ...this.game.event } : null, prediction: this.game.prediction ? { ...this.game.prediction } : null, warden: this.game.warden ? { ...this.game.warden, marks: Array.isArray(this.game.warden.marks) ? this.game.warden.marks.map(m => ({...m})) : [] } : null };
   }
   publicPlayers() { return Object.values(this.players).map(p => { const maxHp = HEROES[p.hero]?.maxHp || 100; if (p.maxHp !== maxHp) { p.maxHp = maxHp; p.hp = Math.min(maxHp, Math.max(0, Number(p.hp) || maxHp)); } return { id: p.id, slot: p.slot, name: p.name, hero: p.hero, maxHp, hp: Math.round(Math.min(maxHp, Math.max(0, Number(p.hp) || 0))), ready: p.ready, alive: p.alive, out: p.out, connected: p.connected, x: p.x, y: p.y, vx: p.vx, vy: p.vy, dir: p.dir, anim: p.anim, defending: p.defending, deaths: p.deaths }; }); }
