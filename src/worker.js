@@ -14,18 +14,19 @@ const CYBER_EVENTS = [
   { type: "matteus", label: "Gás do Matteus", weight: 4 },
   { type: "timao", label: "Timão", weight: 4 },
   { type: "kronos", label: "Kronos", weight: 5 },
+  { type: "storm", label: "Tempestade", weight: 5 },
   { type: "crystal", label: "Kayllane", weight: 6 },
   { type: "scalding", label: "Chão Escaldante", weight: 6 },
   { type: "laura", label: "Laura", weight: 7 },
   { type: "akane", label: "Akane", weight: 9 },
   { type: "web", label: "Teia do Miranha", weight: 10 },
-  { type: "maleta", label: "Chão do Maleta", weight: 11 },
-  { type: "rocket", label: "Foguete do Astro", weight: 18 },
+  { type: "maleta", label: "Chão do Maleta", weight: 8 },
+  { type: "rocket", label: "Foguete do Astro", weight: 21 },
   { type: "other", label: "Outros eventos", weight: 10 },
   { type: "fire", label: "Sala em chamas", weight: 7 },
   { type: "none", label: "Sala tranquila", weight: 0 }
 ];
-const PREDICTABLE = ["laura", "web", "fire", "scalding", "rocket", "kronos", "maleta", "akane", "matteus", "areia"];
+const PREDICTABLE = ["laura", "web", "fire", "scalding", "rocket", "kronos", "maleta", "akane", "matteus", "areia", "storm"];
 
 const now = () => Date.now();
 function json(data, status = 200) {
@@ -86,6 +87,7 @@ function freshGame() {
     prediction: null,
     lauraRoomsLeft: 0,
     maletaRoomsLeft: 0,
+    stormRoomsLeft: 0,
     startedAt: 0,
     endedAt: 0,
     message: "Escolham os personagens e apertem COMEÇAR.",
@@ -298,6 +300,12 @@ export class MatchRoom extends DurableObject {
       this.game.message = `O chão do Maleta ainda pulsa por ${this.game.maletaRoomsLeft + 1} sala(s).`;
       return;
     }
+    if (this.game.stormRoomsLeft > 0) {
+      this.game.event = makeEvent("storm", room, seed, true);
+      this.game.stormRoomsLeft -= 1;
+      this.game.message = this.game.stormRoomsLeft > 0 ? `A tempestade continua por mais ${this.game.stormRoomsLeft} sala(s).` : "A tempestade está se dissipando.";
+      return;
+    }
     if (this.game.prediction && this.game.prediction.room === room) {
       const pred = this.game.prediction;
       this.game.prediction = null;
@@ -327,8 +335,9 @@ export class MatchRoom extends DurableObject {
   }
 
   applyPersistentEventEffects() {
-    if (this.game.event.type === "laura") this.game.lauraRoomsLeft = 5;
-    if (this.game.event.type === "maleta") this.game.maletaRoomsLeft = Math.max(this.game.maletaRoomsLeft, 3);
+    if (this.game.event.type === "laura") this.game.lauraRoomsLeft = 4;
+    if (this.game.event.type === "maleta") this.game.maletaRoomsLeft = 2;
+    if (this.game.event.type === "storm") this.game.stormRoomsLeft = 2;
   }
 
   advanceRoom(byName, jump = 1) {
