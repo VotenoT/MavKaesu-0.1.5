@@ -90,7 +90,27 @@
       #menuScreen p { font-size:15px; }
       #menuScreen .status { font-size:14px; }
     }
-  </style>
+  
+#exitBtn {
+  position: absolute !important;
+  left: 50% !important;
+  right: auto !important;
+  top: 118px !important;
+  bottom: auto !important;
+  transform: translateX(-50%) !important;
+  width: 104px !important;
+  height: 34px !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+  padding: 0 !important;
+  z-index: 42 !important;
+  background: rgba(255,52,83,.34) !important;
+}
+@media (max-height: 520px) {
+  #exitBtn { top: 104px !important; width: 96px !important; height: 32px !important; font-size: 12px !important; }
+}
+
+</style>
 </head>
 <body>
   <div id="shell"><div id="stage">
@@ -133,7 +153,8 @@
     const HEROES = {
       votenot: { label:'VotenoT', role:'Chamas e defesa', hp:100, preview:'volter_skin.png', idle:'player_idle.png', jump:'player_jump.png', down:'player_down.png', defense:'player_defense.png', walk:['player_walk.png','player_walk1.png','player_walk2.png'] },
       astro: { label:'Astro', role:'Portais e mobilidade', hp:125, preview:'astro_skin.png', idle:'astro_idle.png', jump:'astro_jump.png', down:'astro_down.png', defense:'astro_defense.png', walk:['astro_walk.png','astro_walk1.png','astro_walk2.png'] },
-      rex: { label:'Rex', role:'Resistência e impacto', hp:100, preview:'rex_skin.png', idle:'rex_idle.png', jump:'rex_jump.png', down:'rex_down.png', defense:'rex_defense.png', walk:['rex_walk.png','rex_walk1.png','rex_walk2.png'] }
+      rex: { label:'Rex', role:'Resistência e impacto', hp:100, preview:'rex_skin.png', idle:'rex_idle.png', jump:'rex_jump.png', down:'rex_down.png', defense:'rex_defense.png', walk:['rex_walk.png','rex_walk1.png','rex_walk2.png'] },
+      shadow: { label:'Shadow', role:'Velocidade e resiliência', hp:100, preview:'shadow_skin.png', idle:'shadow_walk.png', jump:'shadow_jump.png', down:'shadow_walk.png', defense:'shadow_defense.png', walk:['shadow_walk.png','shadow_walk1.png','shadow_walk2.png'] }
     };
     const CORE_ASSETS = ['room_01.png','room_02.png','room_03.png','room_04.png','room_05.png','room_06.png','room_07.png','room_08.png','room_09.png','room_10.png','room_11.png','room_12.png','room_13.png','room_14.png','room_15.png','room_16.png','room_17.png','room_18.png','room_19.png','room_20.png','room_21.png','room_22.png','room_23.png','room_24.png','room_25.png','room_26.png','room_27.png','room_28.png','room_29.png','room_30.png','room_k.png','laura.png','laura_walk.png','laura_walk1.png','laura_walk2.png','laura_walk3.png','akane.png','akane_heal.png','akane_damage.png','astro_rocket.png','foguete.png','maleta.png','chamas.png','guarda.png','warden.png','warden_attack.png','shriek.png','death.mp3','win.mp3','menu.mp3'];
     const HERO_ASSETS = Object.values(HEROES).flatMap(h => [h.preview,h.idle,h.jump,h.down,h.defense,...h.walk]);
@@ -224,7 +245,7 @@
     function currentHero(){ const me=myServerPlayer(); return me?.hero || app.selectedHero || 'votenot'; }
     function eventType(){ return app.state.game?.event?.type || 'none'; }
     function isRoomLocked(){ return eventType()==='kronos' && !app.eventRuntime.kronosCleared; }
-    function step(dt){ const game=app.state.game||{}; const me=myServerPlayer(); if(game.mode!=='playing'||!me||!me.alive||me.out)return; const stunned = performance.now() < (app.stunUntil||0); const slow = eventType()==='web' ? .7 : (eventType()==='areia'||eventType()==='quicksand') ? .72 : 1; const speed=(app.input.defend?95:210)*slow; let vx=0; if(!stunned){ if(app.input.left)vx-=speed; if(app.input.right)vx+=speed; } app.player.vx=stunned?0:vx; if(app.input.jump&&app.player.grounded&&!app.input.defend&&!stunned){ app.player.vy = eventType()==='kronos' ? -840 : -560; app.player.grounded=false; } app.player.vy+=1500*dt; app.player.x+=app.player.vx*dt; app.player.y+=app.player.vy*dt; if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; } app.player.x=Math.max(38,Math.min(924,app.player.x)); app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir; app.player.defending=app.input.defend; app.player.anim=app.input.defend?'defense':!app.player.grounded?'jump':Math.abs(app.player.vx)>3?'walk':'idle'; handleEventHazard(dt,game,me); const t=performance.now(); if(app.player.x>EXIT_X && !isRoomLocked() && t-app.lastAdvanceAt>900){ app.lastAdvanceAt=t; send({type:'advanceRoom'}); } if(t-app.lastPosSent>100){ app.lastPosSent=t; send({type:'position', x:app.player.x, y:app.player.y, vx:app.player.vx, vy:app.player.vy, dir:app.player.dir, anim:app.player.anim, defending:app.player.defending}); } }
+    function step(dt){ const game=app.state.game||{}; const me=myServerPlayer(); if(game.mode!=='playing'||!me||!me.alive||me.out)return; const stunned = performance.now() < (app.stunUntil||0); const slow = eventType()==='web' ? .7 : (eventType()==='areia'||eventType()==='quicksand') ? .72 : 1; const heroSpeed = currentHero()==='shadow' ? 1.15 : 1; const speed=(app.input.defend?95:210)*slow*heroSpeed; let vx=0; if(!stunned){ if(app.input.left)vx-=speed; if(app.input.right)vx+=speed; } app.player.vx=stunned?0:vx; if(app.input.jump&&app.player.grounded&&!app.input.defend&&!stunned){ app.player.vy = eventType()==='kronos' ? -840 : -560; app.player.grounded=false; } app.player.vy+=1500*dt; app.player.x+=app.player.vx*dt; app.player.y+=app.player.vy*dt; if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; } app.player.x=Math.max(38,Math.min(924,app.player.x)); app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir; app.player.defending=app.input.defend; app.player.anim=app.input.defend?'defense':!app.player.grounded?'jump':Math.abs(app.player.vx)>3?'walk':'idle'; handleEventHazard(dt,game,me); const t=performance.now(); if(app.player.x>EXIT_X && !isRoomLocked() && t-app.lastAdvanceAt>900){ app.lastAdvanceAt=t; send({type:'advanceRoom'}); } if(t-app.lastPosSent>100){ app.lastPosSent=t; send({type:'position', x:app.player.x, y:app.player.y, vx:app.player.vx, vy:app.player.vy, dir:app.player.dir, anim:app.player.anim, defending:app.player.defending}); } }
     function damage(amount,reason){ const t=performance.now(); if(t-app.lastDamageAt<500)return; app.lastDamageAt=t; send({type:'damage', amount, reason}); }
     function heal(amount){ send({type:'heal', amount}); }
     function eventSeconds(){ return (performance.now()-(app.eventRuntime.startedLocal||performance.now()))/1000; }
@@ -234,7 +255,7 @@
       if(ev.type==='rocket'){ if(!rt.rocket && t>2){ const ry = Math.max(GROUND_Y-72, Math.min(GROUND_Y-42, ev.lane || (GROUND_Y-58))); rt.rocket={x:1040,y:ry,vx:-850}; toast('Foguete em movimento! Use DEF.'); } if(rt.rocket&&!rt.rocketHit){ rt.rocket.x+=rt.rocket.vx*dt; const px=app.player.x, py=app.player.y-58; if(Math.abs(rt.rocket.x-px)<55&&Math.abs(rt.rocket.y-py)<48){ rt.rocketHit=true; const projectileDir = Math.sign(rt.rocket.vx)||-1; const facingProjectile = app.player.dir === -projectileDir; if(app.input.defend && facingProjectile) toast('Você aparou o foguete.'); else damage(50,'Foguete do Astro'); } } }
       if(ev.type==='matteus'&&!rt.healDone&&t>5){ rt.healDone=true; heal(30); toast('Gás do Matteus restaurou 30 de vida.'); }
       if(ev.type==='maleta'){ rt.maletaTick=(rt.maletaTick||0)+dt; if(rt.maletaTick>1){ rt.maletaTick=0; if(currentHero()!=='rex'&&app.player.grounded){ damage(1,'Chão do Maleta'); app.stunUntil=performance.now()+300; toast('Stun do Maleta! 0.3s'); } } }
-      if(ev.type==='scalding'){ rt.scaldTick=(rt.scaldTick||0)+dt; if(rt.scaldTick>0.85){ rt.scaldTick=0; if(currentHero()!=='rex' && app.player.grounded && !app.input.defend) damage(5,'Chão Escaldante'); } }
+      if(ev.type==='scalding'){ rt.scaldTick=(rt.scaldTick||0)+dt; if(rt.scaldTick>0.85){ rt.scaldTick=0; if(!['rex','votenot'].includes(currentHero()) && app.player.grounded && !app.input.defend) damage(5,'Chão Escaldante'); } }
       if(ev.type==='quicksand'){ rt.quicksandTick=(rt.quicksandTick||0)+dt; if(app.player.grounded){ app.player.x -= app.player.vx * dt * 0.18; } if(rt.quicksandTick>1.2){ rt.quicksandTick=0; if(app.player.grounded) damage(2,'Areia Movediça'); } }
       if(ev.type==='laura'){ if(rt.lauraX==null)rt.lauraX=-90; const dir=Math.sign(app.player.x-rt.lauraX)||1; rt.lauraX+=dir*124*dt; if(Math.abs(rt.lauraX-app.player.x)<46) damage(999,'Laura'); }
       if(ev.type==='kronos'){ if(!rt.runes){ rt.runes=(ev.runes||[]).map((r,i)=>({...r,baseX:r.x,baseY:Math.max(270,Math.min(385,r.y||330)),phase:i*1.7,got:false,i})); rt.runesCollected=0; } const tm=performance.now()/1000; for(const r of rt.runes){ const rx=(r.baseX||r.x)+Math.sin(tm*.75+r.phase)*18; const ry=(r.baseY||r.y)+Math.cos(tm*.65+r.phase)*10; r.drawX=rx; r.drawY=ry; if(!r.got&&Math.hypot(app.player.x-rx,(app.player.y-78)-ry)<60){ r.got=true; rt.runesCollected++; toast(`Runa ${rt.runesCollected}/${rt.runes.length}`); } } if(!rt.kronosCleared && rt.runesCollected>=rt.runes.length){ rt.kronosCleared=true; toast('Kronos liberou a passagem.'); send({type:'clearEvent', message:'Kronos liberou a passagem.'}); } }
@@ -395,11 +416,17 @@
         ctx.fillStyle='rgba(160,245,255,.65)';
         ctx.fillRect(-26,4,52,3);
       }
+      if(hero==='shadow'){
+        ctx.fillStyle='rgba(120,140,255,.22)';
+        ctx.beginPath();
+        ctx.ellipse(0,8,36,10,0,0,Math.PI*2);
+        ctx.fill();
+      }
       if(img&&img.complete&&img.naturalWidth){
         const dims = file.startsWith('player_') ? [-42,-108,84,126] : [-44,-108,88,116];
         ctx.drawImage(img,dims[0],dims[1],dims[2],dims[3]);
       } else {
-        ctx.fillStyle='#00eaff';
+        ctx.fillStyle=hero==='shadow'?'#2d35ff':'#00eaff';
         ctx.fillRect(-22,-70,44,70);
       }
       if(def){
@@ -416,6 +443,35 @@
           ctx.fillStyle='rgba(150,255,70,.95)';
           ctx.fillRect(-3,-18,10,22);
           ctx.fillRect(-9,-12,22,10);
+        } else if(hero==='astro'){
+          ctx.shadowColor='#ff4dff';
+          ctx.shadowBlur=20;
+          ctx.fillStyle='rgba(255,40,255,.32)';
+          ctx.strokeStyle='rgba(255,125,255,.96)';
+          ctx.lineWidth=4;
+          ctx.beginPath();
+          ctx.ellipse(0,-8,20,43,0,0,Math.PI*2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.strokeStyle='rgba(255,215,255,.7)';
+          ctx.lineWidth=2;
+          ctx.beginPath();
+          ctx.ellipse(0,-8,12,31,0,0,Math.PI*2);
+          ctx.stroke();
+        } else if(hero==='shadow'){
+          ctx.shadowColor='#6d7cff';
+          ctx.shadowBlur=18;
+          ctx.fillStyle='rgba(80,90,255,.28)';
+          ctx.strokeStyle='rgba(170,180,255,.95)';
+          ctx.lineWidth=3;
+          ctx.beginPath();
+          ctx.moveTo(-8,-48);
+          ctx.lineTo(18,-18);
+          ctx.lineTo(12,32);
+          ctx.lineTo(-14,6);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
         } else {
           const g=ctx.createRadialGradient(0,-8,3,0,-8,42);
           g.addColorStop(0,'rgba(255,245,150,.95)');
