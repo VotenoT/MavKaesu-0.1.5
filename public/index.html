@@ -138,7 +138,7 @@
     const CORE_ASSETS = ['room_01.png','room_02.png','room_03.png','room_04.png','room_05.png','room_06.png','room_07.png','room_08.png','room_09.png','room_10.png','room_11.png','room_12.png','room_13.png','room_14.png','room_15.png','room_16.png','room_17.png','room_18.png','room_19.png','room_20.png','room_21.png','room_22.png','room_23.png','room_24.png','room_25.png','room_26.png','room_27.png','room_28.png','room_29.png','room_30.png','room_k.png','laura.png','laura_walk.png','laura_walk1.png','laura_walk2.png','laura_walk3.png','akane.png','akane_heal.png','akane_damage.png','astro_rocket.png','foguete.png','maleta.png','chamas.png','guarda.png','warden.png','warden_attack.png','shriek.png','death.mp3','win.mp3','menu.mp3'];
     const HERO_ASSETS = Object.values(HEROES).flatMap(h => [h.preview,h.idle,h.jump,h.down,h.defense,...h.walk]);
     const ASSET_LIST = Array.from(new Set([...HERO_ASSETS, ...CORE_ASSETS]));
-    const EVENT_LABELS = { none:'Sala tranquila', areia:'Areia Movediça', quicksand:'Areia Movediça', laura:'Laura', web:'Teia do Miranha', fire:'Sala em chamas', scalding:'Chão Escaldante', crystal:'Kayllane', rocket:'Foguete do Astro', kronos:'Kronos', maleta:'Chão do Maleta', akane:'Akane', timao:'Timão', matteus:'Gás do Matteus', other:'Outros eventos', wardenBoss:'Warden' };
+    const EVENT_LABELS = { none:'Sala tranquila', quicksand:'Areia Movediça', areia:'Areia Movediça', laura:'Laura', web:'Teia do Miranha', fire:'Sala em chamas', scalding:'Chão Escaldante', crystal:'Kayllane', rocket:'Foguete do Astro', kronos:'Kronos', maleta:'Chão do Maleta', akane:'Akane', timao:'Timão', matteus:'Gás do Matteus', storm:'Tempestade', wardenBoss:'Warden' };
     const $ = (id) => document.getElementById(id);
     const canvas = $('game');
     const ctx = canvas.getContext('2d', { alpha:false });
@@ -220,24 +220,38 @@
     function renderPlayersHud(){ const list=app.state.players||[]; $('playersHud').innerHTML=list.map(p=>{ const hp=Math.max(0,Math.min(1,(p.hp||0)/(p.maxHp||1))); const stateClass=p.out?'out':(p.alive?'':'dead'); const status=p.out?'saiu':p.alive?'vivo':'morto'; const hero=(HEROES[p.hero]?.label)||p.hero||'Herói'; return `<div class="hpLine"><div class="hpHeader"><span><i class="stateDot ${stateClass}"></i>${escapeHtml(p.name)}</span><span>${Math.round(p.hp)}/${p.maxHp}</span></div><div class="bar"><i style="width:${hp*100}%"></i></div><div class="hpMeta">${hero} • ${status}</div></div>`; }).join('')||'Sem jogadores'; }
     function updateDeadOverlay(){ const me=myServerPlayer(); const game=app.state.game||{}; $('deadOverlay').classList.toggle('active',!!(game.mode==='playing'&&me&&!me.alive&&!me.out)); }
     function escapeHtml(s){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
-    function resetLocalForRoom(){ app.player.x=150; app.player.y=GROUND_Y; app.player.vx=0; app.player.vy=0; app.player.grounded=true; app.lastAdvanceAt=performance.now()+500; app.eventRuntime={ startedLocal:performance.now(), damageDone:false, healDone:false, rocket:null, rocketHit:false, lauraX:-90, runes:null, runesCollected:0, kronosCleared:false, maletaTick:0, scaldTick:0, quicksandTick:0, wardenTick:0, wardenLaser:0, wardenWarn:0 }; }
+    function resetLocalForRoom(){ app.player.x=150; app.player.y=GROUND_Y; app.player.vx=0; app.player.vy=0; app.player.grounded=true; app.lastAdvanceAt=performance.now()+500; app.eventRuntime={ startedLocal:performance.now(), damageDone:false, healDone:false, rocket:null, rocketHit:false, lauraX:-90, runes:null, runesCollected:0, kronosCleared:false, maletaTick:0, scaldTick:0, quicksandTick:0, stormTick:0, stormClouds:null, stormBolts:[], wardenTick:0, wardenLaser:0, wardenWarn:0 }; }
     function currentHero(){ const me=myServerPlayer(); return me?.hero || app.selectedHero || 'votenot'; }
     function eventType(){ return app.state.game?.event?.type || 'none'; }
     function isRoomLocked(){ return eventType()==='kronos' && !app.eventRuntime.kronosCleared; }
-    function step(dt){ const game=app.state.game||{}; const me=myServerPlayer(); if(game.mode!=='playing'||!me||!me.alive||me.out)return; const stunned = performance.now() < (app.stunUntil||0); const slow = eventType()==='web' ? .7 : eventType()==='areia' ? .45 : 1; const speed=(app.input.defend?95:210)*slow; let vx=0; if(!stunned){ if(app.input.left)vx-=speed; if(app.input.right)vx+=speed; } app.player.vx=stunned?0:vx; if(app.input.jump&&app.player.grounded&&!app.input.defend&&!stunned){ app.player.vy = eventType()==='kronos' ? -700 : -560; app.player.grounded=false; } app.player.vy+=1500*dt; app.player.x+=app.player.vx*dt; app.player.y+=app.player.vy*dt; if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; } app.player.x=Math.max(38,Math.min(924,app.player.x)); app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir; app.player.defending=app.input.defend; app.player.anim=app.input.defend?'defense':!app.player.grounded?'jump':Math.abs(app.player.vx)>3?'walk':'idle'; handleEventHazard(dt,game,me); const t=performance.now(); if(app.player.x>EXIT_X && !isRoomLocked() && t-app.lastAdvanceAt>900){ app.lastAdvanceAt=t; send({type:'advanceRoom'}); } if(t-app.lastPosSent>100){ app.lastPosSent=t; send({type:'position', x:app.player.x, y:app.player.y, vx:app.player.vx, vy:app.player.vy, dir:app.player.dir, anim:app.player.anim, defending:app.player.defending}); } }
+    function step(dt){ const game=app.state.game||{}; const me=myServerPlayer(); if(game.mode!=='playing'||!me||!me.alive||me.out)return; const stunned = performance.now() < (app.stunUntil||0); const slow = eventType()==='web' ? .7 : (eventType()==='areia'||eventType()==='quicksand') ? .72 : 1; const speed=(app.input.defend?95:210)*slow; let vx=0; if(!stunned){ if(app.input.left)vx-=speed; if(app.input.right)vx+=speed; } app.player.vx=stunned?0:vx; if(app.input.jump&&app.player.grounded&&!app.input.defend&&!stunned){ app.player.vy = eventType()==='kronos' ? -700 : -560; app.player.grounded=false; } app.player.vy+=1500*dt; app.player.x+=app.player.vx*dt; app.player.y+=app.player.vy*dt; if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; } app.player.x=Math.max(38,Math.min(924,app.player.x)); app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir; app.player.defending=app.input.defend; app.player.anim=app.input.defend?'defense':!app.player.grounded?'jump':Math.abs(app.player.vx)>3?'walk':'idle'; handleEventHazard(dt,game,me); const t=performance.now(); if(app.player.x>EXIT_X && !isRoomLocked() && t-app.lastAdvanceAt>900){ app.lastAdvanceAt=t; send({type:'advanceRoom'}); } if(t-app.lastPosSent>100){ app.lastPosSent=t; send({type:'position', x:app.player.x, y:app.player.y, vx:app.player.vx, vy:app.player.vy, dir:app.player.dir, anim:app.player.anim, defending:app.player.defending}); } }
     function damage(amount,reason){ const t=performance.now(); if(t-app.lastDamageAt<500)return; app.lastDamageAt=t; send({type:'damage', amount, reason}); }
     function heal(amount){ send({type:'heal', amount}); }
     function eventSeconds(){ return (performance.now()-(app.eventRuntime.startedLocal||performance.now()))/1000; }
     function handleEventHazard(dt, game, me){ const ev=game.event||{type:'none'}; const rt=app.eventRuntime; const t=eventSeconds(); if(ev.type==='akane'&&!rt.damageDone&&!rt.healDone&&t>1.0){ if(ev.mode==='heal'){ rt.healDone=true; heal(30); toast('Akane curou você.'); } else { rt.damageDone=true; damage(Math.max(1,(me.hp||100)*0.25),'Akane'); toast('Akane feriu você.'); } }
       if(ev.type==='fire'&&!rt.damageDone&&t>5){ rt.damageDone=true; damage(999,'Sala em chamas'); toast('As chamas fecharam a sala.'); }
-      if(ev.type==='areia'&&!rt.damageDone&&t>4.5&&app.player.grounded){ rt.damageDone=true; damage(38,'Areia Movediça'); toast('A areia puxou seus pés.'); }
+      if(ev.type==='areia'&&!rt.damageDone&&t>4.5&&app.player.grounded){ rt.damageDone=true; damage(18,'Areia Movediça'); toast('A areia puxou seus pés.'); }
       if(ev.type==='rocket'){ if(!rt.rocket && t>2){ const ry = Math.max(GROUND_Y-72, Math.min(GROUND_Y-42, ev.lane || (GROUND_Y-58))); rt.rocket={x:1040,y:ry,vx:-850}; toast('Foguete em movimento! Use DEF.'); } if(rt.rocket&&!rt.rocketHit){ rt.rocket.x+=rt.rocket.vx*dt; const px=app.player.x, py=app.player.y-58; if(Math.abs(rt.rocket.x-px)<55&&Math.abs(rt.rocket.y-py)<48){ rt.rocketHit=true; if(app.input.defend) toast('Você aparou o foguete.'); else damage(50,'Foguete do Astro'); } } }
       if(ev.type==='matteus'&&!rt.healDone&&t>5){ rt.healDone=true; heal(30); toast('Gás do Matteus restaurou 30 de vida.'); }
-      if(ev.type==='maleta'){ rt.maletaTick=(rt.maletaTick||0)+dt; if(rt.maletaTick>1){ rt.maletaTick=0; if(currentHero()!=='rex'&&app.player.grounded){ damage(1,'Chão do Maleta'); app.stunUntil=performance.now()+500; toast('Stun do Maleta!'); } } }
+      if(ev.type==='maleta'){ rt.maletaTick=(rt.maletaTick||0)+dt; if(rt.maletaTick>1){ rt.maletaTick=0; if(currentHero()!=='rex'&&app.player.grounded){ damage(1,'Chão do Maleta'); app.stunUntil=performance.now()+300; toast('Stun do Maleta! 0.3s'); } } }
       if(ev.type==='scalding'){ rt.scaldTick=(rt.scaldTick||0)+dt; if(rt.scaldTick>0.85){ rt.scaldTick=0; if(app.player.grounded && !app.input.defend) damage(5,'Chão Escaldante'); } }
-      if(ev.type==='quicksand'){ rt.quicksandTick=(rt.quicksandTick||0)+dt; if(app.player.grounded){ app.player.x -= app.player.vx * dt * 0.35; } if(rt.quicksandTick>1.2){ rt.quicksandTick=0; if(app.player.grounded) damage(4,'Areia Movediça'); } }
+      if(ev.type==='quicksand'){ rt.quicksandTick=(rt.quicksandTick||0)+dt; if(app.player.grounded){ app.player.x -= app.player.vx * dt * 0.18; } if(rt.quicksandTick>1.2){ rt.quicksandTick=0; if(app.player.grounded) damage(2,'Areia Movediça'); } }
       if(ev.type==='laura'){ if(rt.lauraX==null)rt.lauraX=-90; const dir=Math.sign(app.player.x-rt.lauraX)||1; rt.lauraX+=dir*124*dt; if(Math.abs(rt.lauraX-app.player.x)<42 && Math.abs(GROUND_Y-app.player.y)<75) damage(999,'Laura'); }
       if(ev.type==='kronos'){ if(!rt.runes){ rt.runes=(ev.runes||[]).map((r,i)=>({...r,y:Math.max(270,Math.min(385,r.y||330)),got:false,i})); rt.runesCollected=0; } for(const r of rt.runes){ if(!r.got&&Math.hypot(app.player.x-r.x,(app.player.y-78)-r.y)<58){ r.got=true; rt.runesCollected++; toast(`Runa ${rt.runesCollected}/${rt.runes.length}`); } } if(!rt.kronosCleared && rt.runesCollected>=rt.runes.length){ rt.kronosCleared=true; toast('Kronos liberou a passagem.'); send({type:'clearEvent', message:'Kronos liberou a passagem.'}); } }
+      if(ev.type==='storm'){
+        rt.stormTick=(rt.stormTick||0)+dt;
+        rt.stormBolts=(rt.stormBolts||[]).filter(b=>performance.now()-b.t<420);
+        if(rt.stormTick>=1){
+          rt.stormTick=0;
+          if(Math.random()<0.20){
+            const targets=[app.player, ...friendPlayers().filter(p=>p.alive&&!p.out)];
+            const target=targets[Math.floor(Math.random()*targets.length)] || app.player;
+            const tx=target.x||app.player.x;
+            rt.stormBolts.push({x:tx,t:performance.now()});
+            if(Math.abs(app.player.x-tx)<54) damage(20,'Tempestade');
+          }
+        }
+      }
       if(ev.type==='wardenBoss'){ rt.wardenTick=(rt.wardenTick||0)+dt; if(rt.wardenTick>3.2){ rt.wardenTick=0; rt.wardenWarn=1.1; rt.wardenLaser=(ev.seed+Math.floor(performance.now()/1000))%3; } if(rt.wardenWarn>0){ rt.wardenWarn-=dt; if(rt.wardenWarn<=0){ const lanes=[250,340,430]; const ly=lanes[rt.wardenLaser||0]; if(Math.abs((app.player.y-45)-ly)<45 && !app.input.defend) damage(30,'Warden'); else toast('Você desviou do raio do Warden.'); } } }
     }
     function roomImage(){ const r=app.state.game?.room||1; const n=((r-1)%30)+1; return `room_${String(n).padStart(2,'0')}.png`; }
@@ -253,6 +267,34 @@
       if(ev.type==='matteus' && !app.eventRuntime.healDone){ const g=ctx.createRadialGradient(W*.45,H*.55,40,W*.45,H*.55,520); g.addColorStop(0,'rgba(255,115,215,.24)'); g.addColorStop(1,'rgba(255,80,190,.07)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); for(let i=0;i<8;i++){ ctx.fillStyle='rgba(255,170,230,.06)'; ctx.beginPath(); ctx.ellipse((i*137+performance.now()/24)%W, 150+(i%4)*70, 120, 26, .2, 0, Math.PI*2); ctx.fill(); } }
       if(ev.type==='crystal'){ ctx.fillStyle='rgba(150,70,255,.12)'; ctx.fillRect(0,0,W,H); }
       if(ev.type==='kronos'){ ctx.fillStyle='rgba(60,160,255,.12)'; ctx.fillRect(0,0,W,H); const runes=app.eventRuntime.runes || (ev.runes||[]); ctx.font='900 34px Arial'; ctx.textAlign='center'; for(const r of runes){ if(r.got) continue; const pulse=.55+Math.sin(performance.now()/180+r.x)*.25; const grad=ctx.createRadialGradient(r.x,r.y,6,r.x,r.y,46); grad.addColorStop(0,`rgba(190,245,255,${.92*pulse})`); grad.addColorStop(1,'rgba(75,210,255,.05)'); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(r.x,r.y,46,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(170,240,255,.95)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(r.x,r.y,29,0,Math.PI*2); ctx.stroke(); ctx.fillStyle='#d9fbff'; ctx.shadowColor='#7beeff'; ctx.shadowBlur=16; ctx.fillText(r.symbol||'◆',r.x,r.y+12); ctx.shadowBlur=0; } ctx.textAlign='start'; }
+      if(ev.type==='storm'){
+        const clouds=rt.stormClouds||(rt.stormClouds=Array.from({length:7},(_,i)=>({x:80+i*135,y:62+((i*31)%42),r:42+((i*11)%18)})));
+        ctx.save();
+        for(const c of clouds){
+          ctx.fillStyle='rgba(40,55,92,.62)';
+          ctx.beginPath();
+          ctx.arc(c.x,c.y,c.r,0,Math.PI*2);
+          ctx.arc(c.x+34,c.y+8,c.r*.75,0,Math.PI*2);
+          ctx.arc(c.x-28,c.y+10,c.r*.68,0,Math.PI*2);
+          ctx.fill();
+          ctx.strokeStyle='rgba(150,190,255,.18)';
+          ctx.stroke();
+        }
+        for(const b of (rt.stormBolts||[])){
+          const alpha=Math.max(0,1-(performance.now()-b.t)/420);
+          ctx.strokeStyle=`rgba(170,220,255,${alpha})`;
+          ctx.lineWidth=5;
+          ctx.beginPath();
+          ctx.moveTo(b.x,95);
+          ctx.lineTo(b.x-20,190);
+          ctx.lineTo(b.x+18,280);
+          ctx.lineTo(b.x-8,GROUND_Y+6);
+          ctx.stroke();
+          ctx.fillStyle=`rgba(170,220,255,${alpha*.22})`;
+          ctx.fillRect(b.x-56,0,112,H);
+        }
+        ctx.restore();
+      }
       if(ev.type==='wardenBoss'){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='rgba(70,170,255,.15)'; const lanes=[250,340,430]; for(const y of lanes)ctx.fillRect(0,y-28,W,56); if(app.eventRuntime.wardenWarn>0){ const y=lanes[app.eventRuntime.wardenLaser||0]; ctx.fillStyle='rgba(0,220,255,.35)'; ctx.fillRect(0,y-35,W,70); } }
     }
     
@@ -298,7 +340,40 @@
       return c;
     }
     
-    function drawEffects(){ const ev=app.state.game?.event||{}; const rt=app.eventRuntime; if(ev.type==='rocket'&&rt.rocket&&!rt.rocketHit){ const img=cleanBlackBorderImage('astro_rocket.png'); if(img&&((img.complete&&img.naturalWidth)||img.width)) ctx.drawImage(img,rt.rocket.x-45,rt.rocket.y-25,90,50); else { ctx.fillStyle='#ff4040'; ctx.fillRect(rt.rocket.x-45,rt.rocket.y-12,90,24); } } if(ev.type==='laura'){ const frames=['laura_walk.png','laura_walk1.png','laura_walk2.png','laura_walk3.png','laura.png']; const file=frames[Math.floor(performance.now()/150)%4] || 'laura.png'; const img=(imgs[file]&&imgs[file].complete&&imgs[file].naturalWidth)?imgs[file]:imgs['laura.png']; const x=(rt.lauraX==null?-90:rt.lauraX); if(img&&img.complete&&img.naturalWidth) ctx.drawImage(img,x-50,GROUND_Y-118,100,125); else { ctx.fillStyle='#ff3b7a'; ctx.fillRect(x-28,GROUND_Y-90,56,90); } ctx.fillStyle='#fff'; ctx.font='900 13px Arial'; ctx.textAlign='center'; ctx.fillText('Laura',x,GROUND_Y-126); ctx.textAlign='start'; } if(ev.type==='akane'){ const img=imgs[ev.mode==='heal'?'akane_heal.png':'akane_damage.png']||imgs['akane.png']; if(img&&img.complete&&img.naturalWidth) ctx.drawImage(img,680,GROUND_Y-130,90,130); } }
+    function drawEffects(){
+      const ev=app.state.game?.event||{};
+      const rt=app.eventRuntime;
+      if(ev.type==='rocket'&&rt.rocket&&!rt.rocketHit){
+        const img=cleanBlackBorderImage('astro_rocket.png');
+        if(img&&((img.complete&&img.naturalWidth)||img.width)){
+          ctx.save();
+          ctx.translate(rt.rocket.x,rt.rocket.y);
+          ctx.scale(-1,1);
+          ctx.drawImage(img,-45,-25,90,50);
+          ctx.restore();
+        } else {
+          ctx.fillStyle='#ff4040';
+          ctx.fillRect(rt.rocket.x-45,rt.rocket.y-12,90,24);
+        }
+      }
+      if(ev.type==='laura'){
+        const frames=['laura_walk.png','laura_walk1.png','laura_walk2.png','laura_walk3.png','laura.png'];
+        const file=frames[Math.floor(performance.now()/150)%4] || 'laura.png';
+        const img=(imgs[file]&&imgs[file].complete&&imgs[file].naturalWidth)?imgs[file]:imgs['laura.png'];
+        const x=(rt.lauraX==null?-90:rt.lauraX);
+        if(img&&img.complete&&img.naturalWidth) ctx.drawImage(img,x-50,GROUND_Y-118,100,125);
+        else { ctx.fillStyle='#ff3b7a'; ctx.fillRect(x-28,GROUND_Y-90,56,90); }
+        ctx.fillStyle='#fff';
+        ctx.font='900 13px Arial';
+        ctx.textAlign='center';
+        ctx.fillText('Laura',x,GROUND_Y-126);
+        ctx.textAlign='start';
+      }
+      if(ev.type==='akane'){
+        const img=imgs[ev.mode==='heal'?'akane_heal.png':'akane_damage.png']||imgs['akane.png'];
+        if(img&&img.complete&&img.naturalWidth) ctx.drawImage(img,680,GROUND_Y-130,90,130);
+      }
+    }
     function drawPlayers(){ for(const p of friendPlayers())drawServerPlayer(p,false); const me=myServerPlayer(); if(me&&app.state.game?.mode==='playing')drawLocalPlayer(me); }
     function spriteFor(hero,anim,t){ const h=HEROES[hero]||HEROES.votenot; if(anim==='defense')return h.defense; if(anim==='jump')return h.jump; if(anim==='down')return h.down; if(anim==='walk')return h.walk[Math.floor(t*10)%h.walk.length]; return h.idle; }
     function drawLocalPlayer(me){ const file=spriteFor(me.hero,app.player.anim,performance.now()/1000); drawSprite(file,app.player.x,app.player.y,app.player.dir,me.name,!me.alive||me.out,me.defending); }
