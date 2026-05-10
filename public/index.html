@@ -259,12 +259,12 @@
     function renderPlayersHud(){ const list=app.state.players||[]; $('playersHud').innerHTML=list.map(p=>{ const hp=Math.max(0,Math.min(1,(p.hp||0)/(p.maxHp||1))); const stateClass=p.out?'out':(p.alive?'':'dead'); const status=p.out?'saiu':p.alive?'vivo':'morto'; const hero=(HEROES[p.hero]?.label)||p.hero||'Herói'; return `<div class="hpLine"><div class="hpHeader"><span><i class="stateDot ${stateClass}"></i>${escapeHtml(p.name)}</span><span>${Math.round(p.hp)}/${p.maxHp}</span></div><div class="bar"><i style="width:${hp*100}%"></i></div><div class="hpMeta">${hero} • ${status}</div></div>`; }).join('')||'Sem jogadores'; }
     function updateDeadOverlay(){ const me=myServerPlayer(); const game=app.state.game||{}; $('deadOverlay').classList.toggle('active',!!(game.mode==='playing'&&me&&!me.alive&&!me.out)); }
     function escapeHtml(s){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
-    function resetLocalForRoom(){ app.player.x=150; app.player.y=GROUND_Y; app.player.vx=0; app.player.vy=0; app.player.grounded=true; app.lastAdvanceAt=performance.now()+500; app.eventRuntime={ startedLocal:performance.now(), damageDone:false, healDone:false, rocket:null, rocketHit:false, lauraX:-90, runes:null, runesCollected:0, kronosCleared:false, maletaTick:0, scaldTick:0, quicksandTick:0, stormTick:0, stormClouds:null, stormBolts:[], wardenTick:0, wardenLaser:0, wardenWarn:0 }; }
+    function resetLocalForRoom(){ app.player.x=150; app.player.y=GROUND_Y; app.player.vx=0; app.player.vy=0; app.player.grounded=true; app.lastAdvanceAt=performance.now()+500; app.eventRuntime={ startedLocal:performance.now(), damageDone:false, healDone:false, rocket:null, rocketHit:false, lauraX:-130, lauraActiveAt:0, lauraObstacles:null, runes:null, runesCollected:0, kronosCleared:false, maletaTick:0, scaldTick:0, quicksandTick:0, stormTick:0, stormClouds:null, stormBolts:[], wardenTick:0, wardenLaser:0, wardenWarn:0 }; }
     function currentHero(){ const me=myServerPlayer(); return me?.hero || app.selectedHero || 'votenot'; }
     function eventType(){ return app.state.game?.event?.type || 'none'; }
     function isRoomLocked(){ return eventType()==='kronos' && !app.eventRuntime.kronosCleared; }
     function step(dt){ const game=app.state.game||{}; const me=myServerPlayer(); if(game.mode!=='playing'||!me||!me.alive||me.out)return; const stunned = performance.now() < (app.stunUntil||0); const slow = eventType()==='web' ? .7 : (eventType()==='areia'||eventType()==='quicksand') ? .72 : 1; const heroSpeed = currentHero()==='shadow' ? 1.02 : 1; const speed=(app.input.defend?95:210)*slow*heroSpeed; let vx=0; const nowDash=performance.now(); const dashing=nowDash<(app.dashUntil||0); if(currentHero()==='shadow'&&app.input.dash&&!stunned&&nowDash-(app.lastDashAt||0)>900){ app.lastDashAt=nowDash; app.dashUntil=nowDash+170; toast('Shadow dash!'); } if(!stunned){ if(app.input.left)vx-=speed; if(app.input.right)vx+=speed; } if(dashing){ vx=app.player.dir*620; } app.player.vx=stunned?0:vx; if(app.input.jump&&app.player.grounded&&!app.input.defend&&!stunned){ app.player.vy = eventType()==='kronos' ? -840 : -560; app.player.grounded=false; } app.player.vy+=1500*dt; app.player.x+=app.player.vx*dt; app.player.y+=app.player.vy*dt; if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; } app.player.x=Math.max(38,Math.min(924,app.player.x)); app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir; app.player.defending=app.input.defend; app.player.anim=app.input.defend?'defense':!app.player.grounded?'jump':Math.abs(app.player.vx)>3?'walk':'idle'; handleEventHazard(dt,game,me); const t=performance.now(); if(app.player.x>EXIT_X && !isRoomLocked() && t-app.lastAdvanceAt>900){ app.lastAdvanceAt=t; send({type:'advanceRoom'}); } if(t-app.lastPosSent>100){ app.lastPosSent=t; send({type:'position', x:app.player.x, y:app.player.y, vx:app.player.vx, vy:app.player.vy, dir:app.player.dir, anim:app.player.anim, defending:app.player.defending}); } }
-    function damage(amount,reason){ const t=performance.now(); if(t-app.lastDamageAt<500)return; app.lastDamageAt=t; send({type:'damage', amount, reason}); }
+    function damage(amount,reason){ if(currentHero()==='shadow'){ amount=Math.max(0, amount*0.95); } const t=performance.now(); if(t-app.lastDamageAt<500)return; app.lastDamageAt=t; send({type:'damage', amount, reason}); }
     function heal(amount){ send({type:'heal', amount}); }
     function eventSeconds(){ return (performance.now()-(app.eventRuntime.startedLocal||performance.now()))/1000; }
     function handleEventHazard(dt, game, me){ const ev=game.event||{type:'none'}; const rt=app.eventRuntime; const t=eventSeconds(); if(ev.type==='akane'&&!rt.damageDone&&!rt.healDone&&t>1.0){ if(ev.mode==='heal'){ rt.healDone=true; heal(30); toast('Akane curou você.'); } else { rt.damageDone=true; damage(Math.max(1,(me.hp||100)*0.25),'Akane'); toast('Akane feriu você.'); } }
@@ -276,33 +276,37 @@
       if(ev.type==='scalding'){ rt.scaldTick=(rt.scaldTick||0)+dt; if(rt.scaldTick>0.85){ rt.scaldTick=0; if(!['rex','votenot'].includes(currentHero()) && app.player.grounded && !app.input.defend) damage(5,'Chão Escaldante'); } }
       if(ev.type==='quicksand'){ rt.quicksandTick=(rt.quicksandTick||0)+dt; if(app.player.grounded){ app.player.x -= app.player.vx * dt * 0.18; } if(rt.quicksandTick>1.2){ rt.quicksandTick=0; if(app.player.grounded) damage(2,'Areia Movediça'); } }
       if(ev.type==='laura'){
-        if(rt.lauraX==null)rt.lauraX=-90;
-        if(!rt.lauraObstacles){ rt.lauraObstacles=[{x:300,w:42,h:42},{x:540,w:58,h:34},{x:760,w:46,h:50}].map((o,i)=>({...o,cool:0,i})); }
+        if(rt.lauraX==null) rt.lauraX=-130;
+        if(!rt.lauraObstacles){
+          rt.lauraObstacles=[{x:318,w:42,h:38},{x:560,w:54,h:32},{x:770,w:44,h:46}].map((o,i)=>({...o,cool:0,i}));
+        }
         const dir=Math.sign(app.player.x-rt.lauraX)||1;
-        rt.lauraX+=dir*124*dt;
-        const lauraVisible = rt.lauraX > -20 && rt.lauraX < W + 50;
-        const lauraTouching = Math.abs(rt.lauraX-app.player.x)<46;
-        if(lauraVisible && t>0.9 && lauraTouching){
-          if(app.player.y < GROUND_Y-10){ app.player.vy=Math.max(app.player.vy,560); toast('Laura bloqueou o salto!',800); }
-          else { damage(999,'Laura'); toast('Laura te alcançou!',900); }
+        rt.lauraX+=dir*116*dt;
+        const lauraOnScreen = rt.lauraX > 18 && rt.lauraX < W-18;
+        if(lauraOnScreen && !rt.lauraActiveAt) rt.lauraActiveAt=performance.now()+350;
+        const lauraReady = !!rt.lauraActiveAt && performance.now()>=rt.lauraActiveAt;
+        const dx=Math.abs(rt.lauraX-app.player.x);
+        const jumpingOver = app.player.y < GROUND_Y-14;
+        if(lauraOnScreen && lauraReady && dx<40){
+          if(jumpingOver){
+            app.player.x += (app.player.x < rt.lauraX ? -1 : 1) * 20;
+            app.player.vy=Math.max(app.player.vy,620);
+            toast('Laura bloqueou o salto!',800);
+          } else {
+            damage(999,'Laura');
+            toast('Laura te alcançou!',900);
+          }
         }
         for(const o of rt.lauraObstacles){
           o.cool=Math.max(0,(o.cool||0)-dt);
           const inX=app.player.x>o.x-o.w/2-22 && app.player.x<o.x+o.w/2+22;
           const inY=app.player.y>GROUND_Y-o.h-64;
-          if(inX&&inY&&o.cool<=0){ o.cool=1.1; app.player.x-=app.player.dir*18; app.stunUntil=performance.now()+250; damage(8,'Obstáculo da Laura'); }
-        }
-      }
-      if(ev.type==='laura'&&rt.lauraObstacles){
-        for(const o of rt.lauraObstacles){
-          const ox=o.x-o.w/2, oy=GROUND_Y-o.h;
-          ctx.fillStyle='rgba(35,20,55,.82)';
-          ctx.fillRect(ox,oy,o.w,o.h);
-          ctx.strokeStyle='rgba(255,90,150,.55)';
-          ctx.lineWidth=2;
-          ctx.strokeRect(ox,oy,o.w,o.h);
-          ctx.fillStyle='rgba(255,255,255,.12)';
-          ctx.fillRect(ox+5,oy+6,o.w-10,4);
+          if(inX&&inY&&o.cool<=0){
+            o.cool=1.1;
+            app.player.x += (app.player.x < o.x ? -1 : 1) * 18;
+            app.stunUntil=performance.now()+180;
+            toast('Obstáculo da Laura!',700);
+          }
         }
       }
       if(ev.type==='kronos'){ if(!rt.runes){ rt.runes=(ev.runes||[]).map((r,i)=>({...r,baseX:r.x,baseY:Math.max(270,Math.min(385,r.y||330)),phase:i*1.7,got:false,i})); rt.runesCollected=0; } const tm=performance.now()/1000; for(const r of rt.runes){ const rx=(r.baseX||r.x)+Math.sin(tm*.75+r.phase)*18; const ry=(r.baseY||r.y)+Math.cos(tm*.65+r.phase)*10; r.drawX=rx; r.drawY=ry; if(!r.got&&Math.hypot(app.player.x-rx,(app.player.y-78)-ry)<60){ r.got=true; rt.runesCollected++; toast(`Runa ${rt.runesCollected}/${rt.runes.length}`); } } if(!rt.kronosCleared && rt.runesCollected>=rt.runes.length){ rt.kronosCleared=true; toast('Kronos liberou a passagem.'); send({type:'clearEvent', message:'Kronos liberou a passagem.'}); } }
@@ -347,6 +351,19 @@
       if(ev.type==='quicksand'){ ctx.fillStyle='rgba(210,170,80,.24)'; ctx.fillRect(0,GROUND_Y-2,W,58); for(let x=0;x<W;x+=48){ ctx.fillStyle='rgba(255,230,150,.18)'; ctx.beginPath(); ctx.ellipse(x+20,GROUND_Y+20,22,6,0,0,Math.PI*2); ctx.fill(); } }
       if(ev.type==='matteus' && !app.eventRuntime.healDone){ const g=ctx.createRadialGradient(W*.45,H*.55,40,W*.45,H*.55,520); g.addColorStop(0,'rgba(255,115,215,.24)'); g.addColorStop(1,'rgba(255,80,190,.07)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); for(let i=0;i<8;i++){ ctx.fillStyle='rgba(255,170,230,.06)'; ctx.beginPath(); ctx.ellipse((i*137+performance.now()/24)%W, 150+(i%4)*70, 120, 26, .2, 0, Math.PI*2); ctx.fill(); } }
       if(ev.type==='crystal'){ ctx.fillStyle='rgba(150,70,255,.12)'; ctx.fillRect(0,0,W,H); }
+
+      if(ev.type==='laura'&&rt.lauraObstacles){ // Obstáculos Laura
+        for(const o of rt.lauraObstacles){
+          const ox=o.x-o.w/2, oy=GROUND_Y-o.h;
+          ctx.fillStyle='rgba(35,20,55,.86)';
+          ctx.fillRect(ox,oy,o.w,o.h);
+          ctx.strokeStyle='rgba(255,90,150,.70)';
+          ctx.lineWidth=2;
+          ctx.strokeRect(ox,oy,o.w,o.h);
+          ctx.fillStyle='rgba(255,255,255,.16)';
+          ctx.fillRect(ox+5,oy+6,Math.max(4,o.w-10),4);
+        }
+      }
       if(ev.type==='kronos'){ ctx.fillStyle='rgba(60,160,255,.12)'; ctx.fillRect(0,0,W,H); const runes=app.eventRuntime.runes || (ev.runes||[]); ctx.font='900 34px Arial'; ctx.textAlign='center'; for(const r of runes){ if(r.got) continue; const rx=r.drawX||r.baseX||r.x, ry=r.drawY||r.baseY||r.y; const pulse=.55+Math.sin(performance.now()/180+rx)*.25; const grad=ctx.createRadialGradient(rx,ry,6,rx,ry,46); grad.addColorStop(0,`rgba(190,245,255,${.92*pulse})`); grad.addColorStop(1,'rgba(75,210,255,.05)'); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(rx,ry,46,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(170,240,255,.95)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(rx,ry,29,0,Math.PI*2); ctx.stroke(); ctx.fillStyle='#d9fbff'; ctx.shadowColor='#7beeff'; ctx.shadowBlur=16; ctx.fillText(r.symbol||'◆',rx,ry+12); ctx.shadowBlur=0; } ctx.textAlign='start'; }
       if(ev.type==='storm'){
         const clouds=rt.stormClouds||(rt.stormClouds=Array.from({length:7},(_,i)=>({x:80+i*135,y:62+((i*31)%42),r:42+((i*11)%18)})));
@@ -456,7 +473,7 @@
       }
     }
     function drawPlayers(){ for(const p of friendPlayers())drawServerPlayer(p,false); const me=myServerPlayer(); if(me&&app.state.game?.mode==='playing')drawLocalPlayer(me); }
-    function spriteFor(hero,anim,t){ const h=HEROES[hero]||HEROES.votenot; if(anim==='defense')return h.defense; if(anim==='jump')return h.jump; if(anim==='down')return h.down; if(anim==='walk')return h.walk[Math.floor(t/0.4)%h.walk.length]; return h.idle; }
+    function spriteFor(hero,anim,t){ const h=HEROES[hero]||HEROES.votenot; if(anim==='defense')return h.defense; if(anim==='jump')return h.jump; if(anim==='down')return h.down; if(anim==='walk')return h.walk[Math.floor(t/0.2)%h.walk.length]; return h.idle; }
     function drawLocalPlayer(me){ const file=spriteFor(me.hero,app.player.anim,performance.now()/1000); drawSprite(file,app.player.x,app.player.y,app.player.dir,me.name,!me.alive||me.out,me.defending,me.hero); }
     function drawServerPlayer(p){ drawSprite(spriteFor(p.hero,p.anim||'idle',performance.now()/1000),p.x,p.y,p.dir,p.name,!p.alive||p.out,p.defending,p.hero); }
 
@@ -485,7 +502,7 @@
 
     function drawSprite(file,x,y,dir,name,ghost,def,hero){
       const img=imgs[file];
-      const targetH=hero==='astro'?132:126;
+      const targetH=hero==='astro'?121.8:116;
       ctx.save();
       ctx.globalAlpha=ghost?.45:1;
       ctx.translate(x,y);
