@@ -139,7 +139,7 @@ export default {
   }
 };
 
-export class CoopRoom extends DurableObject {
+export class MatchRoom extends DurableObject {
   constructor(state, env) {
     super(state, env);
     this.state = state;
