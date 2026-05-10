@@ -4,25 +4,28 @@ const MAX_PLAYERS = 2;
 const ROOM_CODE_RE = /^[A-Z0-9_-]{3,18}$/;
 const STATE_THROTTLE_MS = 100;
 const HEROES = {
-  votenot: { label: "VotenoT", maxHp: 100, color: "#ff7a1a" },
-  astro: { label: "Astro", maxHp: 92, color: "#bb6dff" },
-  rex: { label: "Rex", maxHp: 115, color: "#7dff9d" }
+  votenot: { label: "VotenoT", maxHp: 100, skin: "player", color: "#ff7a1a" },
+  astro: { label: "Astro", maxHp: 125, skin: "astro", color: "#bb6dff" },
+  rex: { label: "Rex", maxHp: 100, skin: "rex", color: "#7dff9d" }
 };
 
 const CYBER_EVENTS = [
-  { type: "none", label: "Sala tranquila", weight: 36 },
-  { type: "laura", label: "Laura", weight: 8 },
-  { type: "web", label: "Teia do Miranha", weight: 9 },
-  { type: "fire", label: "Sala em chamas", weight: 10 },
-  { type: "crystal", label: "Bola de Cristal da Kayllane", weight: 8 },
-  { type: "rocket", label: "Foguete do Astro", weight: 9 },
-  { type: "kronos", label: "Kronos", weight: 7 },
-  { type: "maleta", label: "Chão do Maleta", weight: 7 },
-  { type: "akane", label: "Akane", weight: 10 },
-  { type: "timao", label: "Timão", weight: 6 },
-  { type: "matteus", label: "Gás do Matteus", weight: 7 }
+  { type: "areia", label: "Areia Movediça", weight: 3 },
+  { type: "matteus", label: "Gás do Matteus", weight: 4 },
+  { type: "timao", label: "Timão", weight: 4 },
+  { type: "kronos", label: "Kronos", weight: 5 },
+  { type: "crystal", label: "Kayllane", weight: 6 },
+  { type: "scalding", label: "Chão Escaldante", weight: 6 },
+  { type: "laura", label: "Laura", weight: 7 },
+  { type: "akane", label: "Akane", weight: 9 },
+  { type: "web", label: "Teia do Miranha", weight: 10 },
+  { type: "maleta", label: "Chão do Maleta", weight: 11 },
+  { type: "rocket", label: "Foguete do Astro", weight: 18 },
+  { type: "other", label: "Outros eventos", weight: 10 },
+  { type: "fire", label: "Sala em chamas", weight: 7 },
+  { type: "none", label: "Sala tranquila", weight: 0 }
 ];
-const PREDICTABLE = ["laura", "web", "fire", "rocket", "kronos", "maleta", "akane", "matteus"];
+const PREDICTABLE = ["laura", "web", "fire", "scalding", "rocket", "kronos", "maleta", "akane", "matteus", "areia"];
 
 const now = () => Date.now();
 function json(data, status = 200) {
@@ -60,10 +63,11 @@ function weightedPick(list, rand) {
 }
 function makeEvent(type, room, seed, forced = false) {
   const def = CYBER_EVENTS.find(e => e.type === type) || { type, label: type };
-  const event = { type, label: def.label, room, seed, serial: `${room}_${seed}_${type}_${now()}`, startedAt: now(), forced };
+  const normalizedType = type === "other" ? "other" : type;
+  const event = { type: normalizedType, label: def.label, room, seed, serial: `${room}_${seed}_${type}_${now()}`, startedAt: now(), forced };
   if (type === "akane") event.mode = ((seed + room * 7) % 2 === 0) ? "heal" : "damage";
-  if (type === "rocket") event.lane = 330 + ((seed + room * 17) % 120);
-  if (type === "kronos") event.runes = Array.from({ length: 6 }, (_, i) => ({ x: 150 + ((seed + i * 137 + room * 71) % 650), y: 185 + ((seed + i * 53) % 210), symbol: ["◆","●","▲","✦","⬟","✧"][i] }));
+  if (type === "rocket") event.lane = 383;
+  if (type === "kronos") event.runes = Array.from({ length: 6 }, (_, i) => ({ x: 150 + ((seed + i * 137 + room * 71) % 650), y: 280 + ((seed + i * 53) % 85), symbol: ["◆","●","▲","✦","⬟","✧"][i] }));
   if (type === "crystal") {
     const future = room + 1 + ((seed + room * 11) % 5);
     const predicted = PREDICTABLE[(seed + room * 19) % PREDICTABLE.length];
@@ -239,7 +243,12 @@ export class MatchRoom extends DurableObject {
     const session = this.sessions.get(ws);
     if (this.players[clientId]) {
       const old = this.players[clientId];
-      old.name = name; old.hero = safeHero(old.hero || hero); old.connected = true; old.lastSeen = now();
+      old.name = name;
+      old.hero = safeHero(old.hero || hero);
+      old.maxHp = HEROES[old.hero].maxHp;
+      old.hp = Math.min(old.maxHp, Math.max(0, Number(old.hp) || old.maxHp));
+      old.connected = true;
+      old.lastSeen = now();
       session.id = clientId;
       this.send(ws, { type: "joined", id: clientId, roomCode: this.roomCode, slot: old.slot });
       return this.broadcastState(true);
@@ -318,7 +327,7 @@ export class MatchRoom extends DurableObject {
   }
 
   applyPersistentEventEffects() {
-    if (this.game.event.type === "laura") this.game.lauraRoomsLeft = Math.max(this.game.lauraRoomsLeft, 10);
+    if (this.game.event.type === "laura") this.game.lauraRoomsLeft = 5;
     if (this.game.event.type === "maleta") this.game.maletaRoomsLeft = Math.max(this.game.maletaRoomsLeft, 3);
   }
 
@@ -360,7 +369,7 @@ export class MatchRoom extends DurableObject {
   publicGame() {
     return { ...this.game, event: this.game.event ? { ...this.game.event } : null, prediction: this.game.prediction ? { ...this.game.prediction } : null };
   }
-  publicPlayers() { return Object.values(this.players).map(p => ({ id: p.id, slot: p.slot, name: p.name, hero: p.hero, maxHp: p.maxHp, hp: Math.round(p.hp), ready: p.ready, alive: p.alive, out: p.out, connected: p.connected, x: p.x, y: p.y, vx: p.vx, vy: p.vy, dir: p.dir, anim: p.anim, defending: p.defending, deaths: p.deaths })); }
+  publicPlayers() { return Object.values(this.players).map(p => { const maxHp = HEROES[p.hero]?.maxHp || 100; if (p.maxHp !== maxHp) { p.maxHp = maxHp; p.hp = Math.min(maxHp, Math.max(0, Number(p.hp) || maxHp)); } return { id: p.id, slot: p.slot, name: p.name, hero: p.hero, maxHp, hp: Math.round(Math.min(maxHp, Math.max(0, Number(p.hp) || 0))), ready: p.ready, alive: p.alive, out: p.out, connected: p.connected, x: p.x, y: p.y, vx: p.vx, vy: p.vy, dir: p.dir, anim: p.anim, defending: p.defending, deaths: p.deaths }; }); }
   broadcastState(force = false) {
     const t = now(); if (!force && t - this.lastStateAt < STATE_THROTTLE_MS) return; this.lastStateAt = t;
     this.broadcast({ type: "state", game: this.publicGame(), players: this.publicPlayers(), serverTime: t });
