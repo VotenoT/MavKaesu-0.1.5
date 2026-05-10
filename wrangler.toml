@@ -1,7 +1,6 @@
-name = "mavkaesu-arena-015"
+name = "mavkaesu-arena-015-ultra-stable"
 main = "src/worker.js"
-compatibility_date = "2026-05-09"
-workers_dev = true
+compatibility_date = "2025-08-01"
 
 [assets]
 directory = "./public"

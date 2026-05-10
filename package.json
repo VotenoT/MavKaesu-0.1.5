@@ -1,14 +1,13 @@
 {
-  "name": "mavkaesu-arena-015-cloudflare",
+  "name": "mavkaesu-arena-015-cloudflare-ultra-stable",
   "version": "0.1.5",
-  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "node --check src/worker.js && node --check tools/check-client.mjs"
+    "start": "wrangler dev",
+    "check": "node --check src/worker.js && node tools/check-client.mjs"
   },
   "devDependencies": {
-    "wrangler": "^4.15.0"
+    "wrangler": "^4.90.0"
   }
 }
