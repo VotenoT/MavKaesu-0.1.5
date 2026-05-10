@@ -1,4 +1,4 @@
-name = "mavkaesu-coop-015"
+name = "mavkaesu0-1-5"
 main = "src/worker.js"
 compatibility_date = "2025-08-01"
 
@@ -8,8 +8,8 @@ binding = "ASSETS"
 
 [[durable_objects.bindings]]
 name = "COOP_ROOM"
-class_name = "CoopRoom"
+class_name = "MatchRoom"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["CoopRoom"]
+new_sqlite_classes = ["MatchRoom"]
