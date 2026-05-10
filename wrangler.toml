@@ -1,0 +1,16 @@
+name = "mavkaesu-arena-015"
+main = "src/worker.js"
+compatibility_date = "2026-05-09"
+workers_dev = true
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+name = "MATCHROOM"
+class_name = "MatchRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MatchRoom"]
