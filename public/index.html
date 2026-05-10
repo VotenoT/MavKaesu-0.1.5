@@ -164,7 +164,7 @@
     const CORE_ASSETS = ['room_01.png','room_02.png','room_03.png','room_04.png','room_05.png','room_06.png','room_07.png','room_08.png','room_09.png','room_10.png','room_11.png','room_12.png','room_13.png','room_14.png','room_15.png','room_16.png','room_17.png','room_18.png','room_19.png','room_20.png','room_21.png','room_22.png','room_23.png','room_24.png','room_25.png','room_26.png','room_27.png','room_28.png','room_29.png','room_30.png','room_k.png','laura.png','laura_walk.png','laura_walk1.png','laura_walk2.png','laura_walk3.png','akane.png','akane_heal.png','akane_damage.png','astro_rocket.png','foguete.png','maleta.png','chamas.png','guarda.png','warden.png','warden_attack.png','shriek.png','death.mp3','win.mp3','menu.mp3'];
     const HERO_ASSETS = Object.values(HEROES).flatMap(h => [h.preview,h.idle,h.jump,h.down,h.defense,...h.walk]);
     const ASSET_LIST = Array.from(new Set([...HERO_ASSETS, ...CORE_ASSETS]));
-    const EVENT_LABELS = { none:'Sala silenciosa', other:'Sala silenciosa', quicksand:'Areia Movediça', areia:'Areia Movediça', laura:'Laura', web:'Teia do Miranha', fire:'Sala em chamas', scalding:'Chão Escaldante', crystal:'Kayllane', rocket:'Foguete do Astro', kronos:'Kronos', maleta:'Chão do Maleta', akane:'Akane', timao:'Timão', matteus:'Gás do Matteus', storm:'Tempestade', wardenBoss:'Warden' };
+    const EVENT_LABELS = { none:'Sala silenciosa', other:'Sala silenciosa', quicksand:'Areia Movediça', areia:'Areia Movediça', laura:'Laura', web:'Teia do Miranha', fire:'Sala em chamas', scalding:'Chão Escaldante', crystal:'Kayllane', rocket:'Foguete do Astro', kronos:'Kronos', maleta:'Chão do Maleta', akane:'Akane', timao:'Timão', matteus:'Gás do Matteus', storm:'Tempestade', breeze:'Brisa Celestial', wardenBoss:'Warden' };
     const $ = (id) => document.getElementById(id);
     const canvas = $('game');
     const ctx = canvas.getContext('2d', { alpha:false });
@@ -189,23 +189,34 @@
     function onMessage(raw){ const msg=JSON.parse(raw); if(msg.type==='hello')return; if(msg.type==='joined'){ app.myId=msg.id; app.roomCode=msg.roomCode; $('lobbyCode').textContent=msg.roomCode; $('roomInput').value=msg.roomCode; return; } if(msg.type==='pong'){ app.ping=Math.max(0,Math.round(performance.now()-Number(msg.t||performance.now()))); return; } if(msg.type==='error'){ toast(msg.message||'Erro na sala.',4200); $('menuStatus').textContent=msg.message||'Erro na sala.'; return; } if(msg.type==='state'){ app.state={ game:msg.game, players:msg.players||[] }; app.lastStateAt=performance.now(); updateScreensFromState(); const key=`${msg.game.runId}:${msg.game.room}:${msg.game.event?.serial||'none'}`; if(app.localRoomKey!==key){ app.localRoomKey=key; resetLocalForRoom(); toast(msg.game.message||`Sala ${msg.game.room}`); } } }
     function myServerPlayer(){ return app.state.players.find(p=>p.id===app.myId); }
     function friendPlayers(){ return app.state.players.filter(p=>p.id!==app.myId); }
+    
+    function roomVisualIndex(room){ return ((Math.max(1,Number(room)||1)-1)%30)+1; }
+    function roomWorldKey(room){ const n=roomVisualIndex(room); return n<=10?'cyberpunk':n<=20?'duneshade':'elyson'; }
+    function roomWorldName(room){ const key=roomWorldKey(room); return key==='duneshade'?'DuneShade':key==='elyson'?'Elyson':'Cyberpunk'; }
+
     function eventHudHtml(game){
       const ev = game?.event || { type:'none' };
       const room = Number(game?.room || 1);
-      const lines = [];
+      const lines = [`🌍 ${roomWorldName(room)}`];
+      const seen = new Set();
+      function addLine(txt){
+        if(!txt || seen.has(txt)) return;
+        seen.add(txt);
+        lines.push(txt);
+      }
       if(game?.prediction && Number(game.prediction.room) > room){
         const p = game.prediction;
         const label = EVENT_LABELS[p.type] || p.label || p.type || 'Evento';
-        lines.push(`🔮: ${label} - Sala ${p.room}`);
+        addLine(`🔮: ${label} - Sala ${p.room}`);
       }
       if(ev && ev.type !== 'none' && ev.type !== 'crystal'){
-        lines.push(EVENT_LABELS[ev.type] || ev.label || ev.type);
+        addLine(EVENT_LABELS[ev.type] || ev.label || ev.type);
       }
       if(ev && ev.type === 'crystal' && ev.prediction && Number(ev.prediction.room) > room){
         const label = EVENT_LABELS[ev.prediction.type] || ev.prediction.label || ev.prediction.type || 'Evento';
-        lines.push(`🔮: ${label} - Sala ${ev.prediction.room}`);
+        addLine(`🔮: ${label} - Sala ${ev.prediction.room}`);
       }
-      if(!lines.length) lines.push('Evento: Sala silenciosa');
+      if(lines.length===1) addLine('Evento: Sala silenciosa');
       return lines.map(escapeHtml).join('<br>');
     }
     
@@ -217,7 +228,7 @@
       btn.classList.toggle('hidden', !(playing && hero==='shadow'));
     }
 
-    function updateScreensFromState(){ const game=app.state.game||{}; $('lobbyCode').textContent=app.roomCode||'---'; $('lobbyMsg').textContent=game.message||'Aguardando jogadores...'; $('roomLabel').textContent=`Cyberpunk • Sala ${game.room||1}`; $('eventLabel').innerHTML=eventHudHtml(game); $('connLabel').textContent=app.connected?'online':'offline'; $('pingLabel').textContent=app.ping?app.ping+' ms':'-- ms'; renderLobbyPlayers(); renderPlayersHud(); updateDeadOverlay(); const hide=game.mode!=='playing'; $('gameHud').classList.toggle('hidden',hide); $('controlsLayer').classList.toggle('hidden',hide); updateDashButtonVisibility(); const me=myServerPlayer(); $('startBtn').textContent=me?.ready?'Aguardando amigo...':'Começar'; if(game.mode==='playing'){ if(me && !app._syncedStart){ app.player.x=me.x; app.player.y=me.y; app.player.vx=0; app.player.vy=0; app._syncedStart=true; enterImmersiveLandscape(); } showScreen(null); } else { app._syncedStart=false; if(game.mode==='post'){ $('postMsg').textContent=game.message||'Fim da tentativa.'; $('postStats').textContent=`Chegaram até a sala ${game.room||1}. Avanços: ${game.stats?.advances||0}. Mortes: ${game.stats?.deaths||0}.`; showScreen('postScreen'); } else if(app.connected) showScreen('lobbyScreen'); else showScreen('menuScreen'); } }
+    function updateScreensFromState(){ const game=app.state.game||{}; $('lobbyCode').textContent=app.roomCode||'---'; $('lobbyMsg').textContent=game.message||'Aguardando jogadores...'; $('roomLabel').textContent=`${roomWorldName(game.room||1)} • Sala ${game.room||1}`; $('eventLabel').innerHTML=eventHudHtml(game); $('connLabel').textContent=app.connected?'online':'offline'; $('pingLabel').textContent=app.ping?app.ping+' ms':'-- ms'; renderLobbyPlayers(); renderPlayersHud(); updateDeadOverlay(); const hide=game.mode!=='playing'; $('gameHud').classList.toggle('hidden',hide); $('controlsLayer').classList.toggle('hidden',hide); updateDashButtonVisibility(); const me=myServerPlayer(); $('startBtn').textContent=me?.ready?'Aguardando amigo...':'Começar'; if(game.mode==='playing'){ if(me && !app._syncedStart){ app.player.x=me.x; app.player.y=me.y; app.player.vx=0; app.player.vy=0; app._syncedStart=true; enterImmersiveLandscape(); } showScreen(null); } else { app._syncedStart=false; if(game.mode==='post'){ $('postMsg').textContent=game.message||'Fim da tentativa.'; $('postStats').textContent=`Chegaram até a sala ${game.room||1}. Avanços: ${game.stats?.advances||0}. Mortes: ${game.stats?.deaths||0}.`; showScreen('postScreen'); } else if(app.connected) showScreen('lobbyScreen'); else showScreen('menuScreen'); } }
     function renderHeroCards(containerId){ const box=$(containerId); box.innerHTML=''; for(const [key,h] of Object.entries(HEROES)){ const card=document.createElement('button'); card.className='hero-card'+(app.selectedHero===key?' selected':''); card.innerHTML=`<img src="${AS+h.preview}" alt=""><div><strong>${h.label}</strong><br><span>${h.role}</span></div>`; card.onclick=()=>{ app.selectedHero=key; try{localStorage.setItem('mavCoopHero',key);}catch{} renderHeroCards('lobbyHeroPicker'); updateSelectedHeroStatus(); updateDashButtonVisibility(); send({type:'selectHero', hero:key}); }; box.appendChild(card); } }
     function updateSelectedHeroStatus(){ const h=HEROES[app.selectedHero]||HEROES.votenot; $('selectedHeroStatus').textContent=`Personagem atual: ${h.label} • ${h.role}`; }
     function renderEventBanner(){
@@ -275,7 +286,7 @@
       }
       return rt.lauraObstacles;
     }
-    function resolveLauraObstacles(prevX){
+    function resolveLauraObstacles(prevX, prevY){
       if(eventType()!=='laura') return;
       const obs=ensureLauraObstacles();
       for(const o of obs){
@@ -284,7 +295,15 @@
         const top=GROUND_Y-o.h;
         const feet=app.player.y;
         const collidingX=app.player.x>left && app.player.x<right;
-        const lowEnough=feet>top+5;
+        const wasAbove=prevY<=top+2;
+        const landing=collidingX && wasAbove && feet>=top && app.player.vy>=0;
+        if(landing){
+          app.player.y=top;
+          app.player.vy=0;
+          app.player.grounded=true;
+          continue;
+        }
+        const lowEnough=feet>top+6;
         if(collidingX && lowEnough){
           if(prevX<=left) app.player.x=left;
           else if(prevX>=right) app.player.x=right;
@@ -382,10 +401,11 @@
       }
       app.player.vy+=1500*dt;
       const prevX=app.player.x;
+      const prevY=app.player.y;
       app.player.x+=app.player.vx*dt;
       app.player.y+=app.player.vy*dt;
       if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; }
-      resolveLauraObstacles(prevX);
+      resolveLauraObstacles(prevX, prevY);
       if(eventType()==='wardenBoss' && isRoomLocked()) app.player.x=Math.min(app.player.x,820);
       app.player.x=Math.max(38,Math.min(924,app.player.x));
       app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir;
@@ -428,6 +448,38 @@
         }
       }
       if(ev.type==='kronos'){ if(!rt.runes){ rt.runes=(ev.runes||[]).map((r,i)=>({...r,baseX:r.x,baseY:Math.max(270,Math.min(385,r.y||330)),phase:i*1.7,got:false,i})); rt.runesCollected=0; } const tm=performance.now()/1000; for(const r of rt.runes){ const rx=(r.baseX||r.x)+Math.sin(tm*.75+r.phase)*18; const ry=(r.baseY||r.y)+Math.cos(tm*.65+r.phase)*10; r.drawX=rx; r.drawY=ry; if(!r.got&&Math.hypot(app.player.x-rx,(app.player.y-78)-ry)<60){ r.got=true; rt.runesCollected++; toast(`Runa ${rt.runesCollected}/${rt.runes.length}`); } } if(!rt.kronosCleared && rt.runesCollected>=rt.runes.length){ rt.kronosCleared=true; toast('Kronos liberou a passagem.'); send({type:'clearEvent', message:'Kronos liberou a passagem.'}); } }
+
+      if(ev.type==='breeze'){
+        rt.breezeTime=(rt.breezeTime||0)+dt;
+        const pushDir = app.player.x < W/2 ? -1 : 1;
+        if(rt.breezeTime<=10){
+          app.player.x += pushDir * 72 * dt;
+          rt.breezeHeal=(rt.breezeHeal||0)+dt;
+          if(rt.breezeHeal>=1){
+            rt.breezeHeal=0;
+            heal(1);
+            toast('Brisa Celestial: +1 HP',650);
+          }
+        }
+      }
+
+      if(ev.type==='breeze'){
+        ctx.save();
+        const tm=performance.now()/1000;
+        ctx.fillStyle='rgba(185,235,255,.10)';
+        ctx.fillRect(0,0,W,H);
+        ctx.strokeStyle='rgba(210,250,255,.38)';
+        ctx.lineWidth=3;
+        for(let i=0;i<9;i++){
+          const y=115+i*38;
+          const x=((tm*60+i*113)% (W+180))-90;
+          ctx.beginPath();
+          ctx.moveTo(x,y);
+          ctx.bezierCurveTo(x+45,y-20,x+90,y+20,x+145,y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
       if(ev.type==='storm'){
         rt.stormTick=(rt.stormTick||0)+dt;
         rt.stormBolts=(rt.stormBolts||[]).filter(b=>performance.now()-b.t<420);
