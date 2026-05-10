@@ -70,6 +70,7 @@ function makeEvent(type, room, seed, forced = false) {
   if (type === "akane") event.mode = ((seed + room * 7) % 2 === 0) ? "heal" : "damage";
   if (type === "rocket") event.lane = 383;
   if (type === "kronos") event.runes = Array.from({ length: 6 }, (_, i) => ({ x: 150 + ((seed + i * 137 + room * 71) % 650), y: 280 + ((seed + i * 53) % 85), symbol: ["◆","●","▲","✦","⬟","✧"][i] }));
+  if (type === "wardenBoss") { event.label = "Warden"; event.hp = 200; event.maxHp = 200; event.marks = buildWardenMarks(seed, 0); }
   if (type === "crystal") {
     const future = room + 1 + ((seed + room * 11) % 5);
     const predicted = PREDICTABLE[(seed + room * 19) % PREDICTABLE.length];
@@ -77,6 +78,16 @@ function makeEvent(type, room, seed, forced = false) {
   }
   return event;
 }
+
+function buildWardenMarks(seed, cycle = 0) {
+  const xs = [
+    170 + ((seed + cycle * 137) % 230),
+    520 + ((seed + cycle * 211) % 260)
+  ];
+  if (Math.abs(xs[0] - xs[1]) < 210) xs[1] = Math.min(780, xs[1] + 210);
+  return xs.map((x, i) => ({ id: i, x, y: 420, r: 46 }));
+}
+
 function freshGame() {
   return {
     mode: "lobby",
@@ -89,6 +100,7 @@ function freshGame() {
     lauraRoomsLeft: 0,
     maletaRoomsLeft: 0,
     stormRoomsLeft: 0,
+    warden: null,
     startedAt: 0,
     endedAt: 0,
     message: "Escolham os personagens e apertem COMEÇAR.",
@@ -203,6 +215,10 @@ export class MatchRoom extends DurableObject {
     }
     if (type === "advanceRoom") {
       if (this.game.mode !== "playing" || !player.alive || player.out) return;
+      if (this.game.room === 50 && this.game.event?.type === "wardenBoss" && !this.game.warden?.defeated) {
+        this.game.message = "O Warden bloqueia o caminho. Derrotem-no nas marcas verdes.";
+        return this.broadcastState(true);
+      }
       if (now() - this.lastAdvanceAt < 650) return;
       this.lastAdvanceAt = now();
       this.advanceRoom(player.name, Number(msg.jump || 1));
@@ -219,6 +235,29 @@ export class MatchRoom extends DurableObject {
       const amount = clamp(msg.amount, 0, 200);
       player.hp = Math.min(player.maxHp, player.hp + amount);
       this.game.message = `${player.name} recuperou vida.`;
+      return this.broadcastState(true);
+    }
+    if (type === "wardenMarkHit") {
+      if (this.game.mode !== "playing" || this.game.room !== 50 || this.game.event?.type !== "wardenBoss") return;
+      this.syncWardenState();
+      const w = this.game.warden;
+      if (!w || w.defeated || !w.marksActive) return this.broadcastState(false);
+      const cycle = Number(msg.cycle);
+      if (cycle !== w.cycle || w.lastHitCycle === cycle) return this.broadcastState(false);
+      w.lastHitCycle = cycle;
+      w.hp = Math.max(0, Number(w.hp || 0) - 50);
+      w.marksActive = false;
+      w.nextMarksAt = now() + 5000;
+      if (w.hp <= 0) {
+        w.defeated = true;
+        w.marksActive = false;
+        this.game.event.defeated = true;
+        this.game.event.hp = 0;
+        this.game.message = "O Warden foi derrotado. A saída da sala 50 está livre!";
+      } else {
+        this.game.event.hp = w.hp;
+        this.game.message = `As marcas acertaram o Warden: -50 HP. Vida restante: ${w.hp}/${w.maxHp}.`;
+      }
       return this.broadcastState(true);
     }
     if (type === "clearEvent") {
@@ -284,9 +323,25 @@ export class MatchRoom extends DurableObject {
     const room = this.game.room;
     const seed = this.game.seed + room * 7919 + this.game.stats.advances * 17;
     if (room === 50) {
+      this.game.prediction = null;
+      this.game.lauraRoomsLeft = 0;
+      this.game.maletaRoomsLeft = 0;
+      this.game.stormRoomsLeft = 0;
       this.game.event = makeEvent("wardenBoss", room, seed, true);
       this.game.event.label = "Warden";
-      this.game.message = "O Warden bloqueou a sala 50.";
+      this.game.warden = {
+        hp: 200,
+        maxHp: 200,
+        defeated: false,
+        cycle: 0,
+        marks: buildWardenMarks(seed, 0),
+        marksActive: true,
+        lastMarkMoveAt: now(),
+        nextMarksAt: 0,
+        lastHitCycle: -1,
+        seed
+      };
+      this.game.message = "Sala 50: o Warden bloqueou o caminho. Fiquem nas marcas e defendam os lasers.";
       return;
     }
     if (this.game.prediction && this.game.prediction.room <= room) {
@@ -344,7 +399,12 @@ export class MatchRoom extends DurableObject {
   }
 
   advanceRoom(byName, jump = 1) {
-    const steps = Math.max(1, Math.min(5, Math.floor(jump || 1)));
+    let steps = Math.max(1, Math.min(5, Math.floor(jump || 1)));
+    if (this.game.room < 50 && this.game.room + steps > 50) steps = 50 - this.game.room;
+    if (this.game.room === 50 && this.game.event?.type === "wardenBoss" && !this.game.warden?.defeated) {
+      this.game.message = "O Warden ainda está bloqueando a saída.";
+      return;
+    }
     this.game.room += steps;
     this.game.stats.advances += steps;
     let i = 0;
@@ -384,7 +444,8 @@ export class MatchRoom extends DurableObject {
   }
 
   publicGame() {
-    return { ...this.game, event: this.game.event ? { ...this.game.event } : null, prediction: this.game.prediction ? { ...this.game.prediction } : null };
+    this.syncWardenState();
+    return { ...this.game, event: this.game.event ? { ...this.game.event } : null, prediction: this.game.prediction ? { ...this.game.prediction } : null, warden: this.game.warden ? { ...this.game.warden, marks: Array.isArray(this.game.warden.marks) ? this.game.warden.marks.map(m => ({...m})) : [] } : null };
   }
   publicPlayers() { return Object.values(this.players).map(p => { const maxHp = HEROES[p.hero]?.maxHp || 100; if (p.maxHp !== maxHp) { p.maxHp = maxHp; p.hp = Math.min(maxHp, Math.max(0, Number(p.hp) || maxHp)); } return { id: p.id, slot: p.slot, name: p.name, hero: p.hero, maxHp, hp: Math.round(Math.min(maxHp, Math.max(0, Number(p.hp) || 0))), ready: p.ready, alive: p.alive, out: p.out, connected: p.connected, x: p.x, y: p.y, vx: p.vx, vy: p.vy, dir: p.dir, anim: p.anim, defending: p.defending, deaths: p.deaths }; }); }
   broadcastState(force = false) {
