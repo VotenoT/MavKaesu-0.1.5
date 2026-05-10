@@ -4,30 +4,35 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#050812" />
-  <title>MAVKaesu Coop Standard 0.1.5</title>
+  <title>MAVKaesu Coop 0.1.5 Reavaliado</title>
   <style>
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; touch-action: none; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:#050812; color:#fff; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     button, input { font: inherit; }
     #shell { position: fixed; inset: 0; overflow: hidden; display: grid; place-items: center; background: radial-gradient(circle at 35% 12%, #14345c, #050812 68%); }
-    #stage { position: relative; width: min(100dvw, calc(100dvh * 16 / 9)); height: min(100dvh, calc(100dvw * 9 / 16)); overflow: hidden; background:#070a16; border-radius: 14px; box-shadow: 0 0 32px rgba(0,0,0,.56); }
-    body.force-landscape #stage { position:absolute; left:50%; top:50%; width:100dvh; height:100dvw; max-width:none; max-height:none; transform: translate(-50%, -50%) rotate(90deg); transform-origin:center center; border-radius:0; }
-    canvas { width: 100%; height: 100%; display: block; background:#070a16; }
-    .screen { position:absolute; inset:0; z-index:20; display:none; padding:clamp(14px,3vw,28px); background:linear-gradient(135deg, rgba(4,6,17,.97), rgba(5,16,31,.95)); overflow:auto; }
+    #stage { position: relative; width: 100dvw; height: 100dvh; overflow: hidden; background:#070a16; border-radius:0; box-shadow:0 0 32px rgba(0,0,0,.56); }
+    body.force-landscape #stage { position:absolute; left:50%; top:50%; width:100dvh; height:100dvw; max-width:none; max-height:none; transform:translate(-50%, -50%) rotate(90deg); transform-origin:center center; border-radius:0; }
+    canvas { width: 100%; height: 100%; display: block; background:#070a16; touch-action:none; }
+    .screen { position:absolute; inset:0; z-index:20; display:none; padding:clamp(10px,2.5vw,22px); padding-top:max(12px, env(safe-area-inset-top)); background:linear-gradient(135deg, rgba(4,6,17,.97), rgba(5,16,31,.95)); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; }
     .screen.active { display:block; }
-    .panel { max-width: 920px; margin:0 auto; min-height:100%; display:grid; align-content:center; gap:14px; }
-    h1 { margin:0; font-size:clamp(27px, 5vw, 54px); letter-spacing:.08em; text-transform:uppercase; text-shadow:0 0 18px rgba(0,234,255,.35); }
+    .screen button, .screen input, .utility button { touch-action:manipulation; }
+    .panel { max-width:920px; margin:0 auto; min-height:auto; display:grid; align-content:start; gap:10px; padding-bottom:96px; }
+    #menuScreen .panel, #lobbyScreen .panel { align-content:start; padding-top:max(8px, env(safe-area-inset-top)); }
+    h1 { margin:0; font-size:clamp(25px, 5vw, 54px); letter-spacing:.08em; text-transform:uppercase; text-shadow:0 0 18px rgba(0,234,255,.35); }
     h2 { margin:0; font-size:clamp(20px, 3vw, 32px); }
-    p { margin:0; line-height:1.45; color:rgba(255,255,255,.84); }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .menuActions { display:flex; gap:10px; flex-wrap:wrap; }
-    input { width:min(100%,340px); padding:13px 14px; border-radius:14px; border:1px solid rgba(255,255,255,.22); background:rgba(0,0,0,.38); color:#fff; outline:none; }
+    p { margin:0; line-height:1.35; color:rgba(255,255,255,.84); }
+    .row { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+    .menuActions { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; width:min(100%, 560px); }
+    .menuActions .btn { min-height:58px; font-size:17px; }
+    .lobbyActions { display:flex; gap:10px; flex-wrap:wrap; }
+    .lobbyActions .btn { min-height:48px; }
+    input { width:min(100%,340px); padding:12px 13px; border-radius:14px; border:1px solid rgba(255,255,255,.22); background:rgba(0,0,0,.38); color:#fff; outline:none; user-select:text; }
     .roomInput { text-transform:uppercase; }
     .btn { border:0; border-radius:16px; padding:12px 16px; color:#fff; font-weight:900; background:linear-gradient(135deg,#1379ff,#00bcd4); box-shadow:0 10px 18px rgba(0,0,0,.25); }
     .btn.secondary { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); }
     .btn.danger { background:linear-gradient(135deg,#ff355d,#9b1b38); }
     .btn.ready { background:linear-gradient(135deg,#18c965,#0aa86f); }
-    .status { padding:10px 12px; border-radius:14px; background:rgba(0,0,0,.34); border:1px solid rgba(255,255,255,.12); color:rgba(255,255,255,.86); }
+    .status { padding:9px 11px; border-radius:14px; background:rgba(0,0,0,.34); border:1px solid rgba(255,255,255,.12); color:rgba(255,255,255,.86); }
     .grid { display:grid; grid-template-columns: repeat(3,1fr); gap:12px; }
     .hiddenPanel { display:none; } .hiddenPanel.active { display:grid; }
     .hero-card { min-height:150px; padding:12px; border-radius:18px; border:1px solid rgba(255,255,255,.17); background:rgba(255,255,255,.07); display:grid; gap:8px; place-items:center; color:#fff; }
@@ -45,7 +50,7 @@
     .hpHeader { display:flex; justify-content:space-between; gap:8px; font-size:12px; opacity:.94; }
     .bar { height:8px; border-radius:99px; overflow:hidden; background:rgba(130,0,0,.55); border:1px solid rgba(255,255,255,.12); }
     .bar > i { display:block; height:100%; width:100%; background:linear-gradient(90deg,#53ff72,#fbff58); }
-    .utility { position:absolute; top:60px; right:10px; display:grid; gap:8px; pointer-events:auto; z-index:18; }
+    .utility { position:absolute; top:max(10px, env(safe-area-inset-top)); right:10px; display:flex; gap:8px; pointer-events:auto; z-index:35; }
     .smallBtn { border:1px solid rgba(255,255,255,.16); color:#fff; background:rgba(0,0,0,.38); padding:8px 10px; border-radius:12px; font-size:12px; font-weight:900; }
     .controlsLayer { position:absolute; inset:0; pointer-events:none; z-index:12; }
     .movePad { position:absolute; left:16px; bottom:18px; display:flex; gap:14px; pointer-events:auto; }
@@ -64,12 +69,18 @@
     .deadOverlay.active { display:grid; }
     @media (max-width:760px) {
       .grid { grid-template-columns:1fr; }
+      .menuActions { grid-template-columns:1fr; width:100%; }
+      .menuActions .btn { min-height:52px; }
+      .lobbyActions { display:grid; grid-template-columns:1fr; width:100%; }
       .hero-card { grid-template-columns:76px 1fr; place-items:center start; text-align:left; min-height:98px; }
       .hero-card img { width:70px; height:70px; }
       .movePad { left:10px; bottom:12px; gap:10px; }
       .arrowBtn { width:66px; height:66px; font-size:30px; }
       .actionPad { transform:scale(.86); transform-origin:right bottom; right:8px; bottom:8px; }
-      h1 { font-size:28px; }
+      h1 { font-size:28px; padding-right:150px; }
+      #menuScreen .panel { gap:9px; }
+      #menuScreen p { font-size:15px; }
+      #menuScreen .status { font-size:14px; }
     }
   </style>
 </head>
@@ -89,15 +100,15 @@
     </div>
     <div class="deadOverlay" id="deadOverlay"><h2>Você caiu nessa tentativa</h2><p>Seu amigo ainda pode continuar. Você pode assistir ou sair da tentativa.</p><button class="btn danger" id="quitDeadBtn">Desistir da tentativa</button></div>
     <section class="screen active" id="menuScreen"><div class="panel">
-      <h1>MAVKaesu Coop</h1><p>Modo padrão cooperativo: dois jogadores entram em Cyberpunk, avançam juntos de sala, e se um morrer o outro continua.</p>
-      <div class="status" id="menuStatus">Digite seu nome, crie uma sala ou entre por código.</div>
+      <h1>MAVKaesu Coop</h1><p><b>Online cooperativo.</b> Crie uma sala ou entre pelo código do seu amigo.</p>
+      <div class="status" id="menuStatus">Digite seu nome e escolha uma das opções abaixo.</div>
       <div class="row"><input id="nameInput" maxlength="18" placeholder="Digite seu nome" autocomplete="off" /><input class="roomInput" id="roomInput" maxlength="18" placeholder="Código da sala" autocomplete="off" /></div>
-      <div class="menuActions"><button class="btn" id="createBtn">Criar sala</button><button class="btn secondary" id="joinBtn">Entrar na sala</button></div>
-      <p class="status">Depois de entrar na sala, use COMEÇAR e ESCOLHER PERSONAGEM.</p>
+      <div class="menuActions"><button class="btn" id="createBtn">Criar sala</button><button class="btn secondary" id="joinBtn">Entrar em sala</button></div>
+      <p class="status">Depois: lobby → escolher personagem → começar.</p>
     </div></section>
     <section class="screen" id="lobbyScreen"><div class="panel">
       <h1>Sala <span id="lobbyCode">---</span></h1><p id="lobbyMsg">Aguardando jogadores...</p><div class="status" id="lobbyPlayers"></div>
-      <div class="row"><button class="btn ready" id="startBtn">Começar</button><button class="btn secondary" id="chooseHeroBtn">Escolher personagem</button><button class="btn secondary" id="copyBtn">Copiar código</button><button class="btn danger" id="leaveBtn">Sair da sala</button></div>
+      <div class="lobbyActions"><button class="btn ready" id="startBtn">Começar</button><button class="btn secondary" id="chooseHeroBtn">Escolher personagem</button><button class="btn secondary" id="copyBtn">Copiar código</button><button class="btn danger" id="leaveBtn">Sair da sala</button></div>
       <div class="status" id="selectedHeroStatus">Personagem atual: VotenoT</div><div class="grid hiddenPanel" id="lobbyHeroPicker"></div>
     </div></section>
     <section class="screen" id="postScreen"><div class="panel">
@@ -134,7 +145,7 @@
     function getClientId(){ try{ let id=localStorage.getItem('mavCoopClientId'); if(!id){ id='c_'+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem('mavCoopClientId', id); } return id; } catch { return 'c_'+Math.random().toString(36).slice(2); } }
     function loadAssets(){ let done=0; const update=()=>{ done++; $('loadText').textContent=Math.round((done/ASSET_LIST.length)*100)+'%'; if(done>=ASSET_LIST.length){ app.loaded=true; $('loading').style.display='none'; playMenuMusic(); }}; for(const file of ASSET_LIST){ if(/\.(mp3|wav|ogg)$/i.test(file)){ const a=new Audio(AS+file); a.preload='metadata'; a.addEventListener('canplaythrough',update,{once:true}); a.addEventListener('error',update,{once:true}); sounds[file]=a; } else { const img=new Image(); img.onload=update; img.onerror=update; img.src=AS+file; imgs[file]=img; }} if(!ASSET_LIST.length) update(); }
     function playMenuMusic(){ const m=sounds['menu.mp3']; if(!m)return; m.loop=true; m.volume=.22; document.addEventListener('pointerdown',()=>m.play().catch(()=>{}),{once:true}); }
-    function showScreen(name){ for(const el of document.querySelectorAll('.screen')) el.classList.remove('active'); if(name && $(name)) $(name).classList.add('active'); }
+    function showScreen(name){ for(const el of document.querySelectorAll('.screen')) el.classList.remove('active'); if(name && $(name)){ $(name).classList.add('active'); $(name).scrollTop = 0; } }
     function toast(message,ms=2600){ app.msg=message; app.toastUntil=performance.now()+ms; $('toast').textContent=message; $('toast').style.display='block'; }
     function cleanRoom(code){ return String(code||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,18); }
     function randomRoomCode(){ const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let out='MAV'; for(let i=0;i<4;i++) out+=alphabet[Math.floor(Math.random()*alphabet.length)]; return out; }
