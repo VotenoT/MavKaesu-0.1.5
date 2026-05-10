@@ -247,7 +247,7 @@
         else if(ev.type==='timao') detail = 'Timão avançará a sala automaticamente';
         else if(ev.type==='storm') detail='Nuvens carregadas: 20% de chance de raio por segundo';
         else if(ev.type==='other') detail = 'Pequeno respiro antes do próximo perigo';
-        else if(ev.type==='wardenBoss') detail = 'Desvie dos raios e sobreviva';
+        else if(ev.type==='wardenBoss'){ const w=app.state.game?.warden; detail = w?.defeated ? 'Warden derrotado. A saída está livre' : `HP ${Math.max(0,Math.round(w?.hp??200))}/${w?.maxHp||200} • Fique nas marcas verdes • Laser a cada 3s`; }
         lines.push(`<b>${escapeHtml(EVENT_LABELS[ev.type]||ev.label||ev.type)}</b>${detail?`<br><span>${escapeHtml(detail)}</span>`:''}`);
       } else if(ev?.type==='crystal' && ev.prediction && Number(ev.prediction.room) > room && !hasFuturePrediction){
         lines.push(`<b>🔮 ${escapeHtml(EVENT_LABELS[ev.prediction.type]||ev.prediction.type)} - Sala ${ev.prediction.room}</b>`);
@@ -262,8 +262,146 @@
     function resetLocalForRoom(){ app.player.x=150; app.player.y=GROUND_Y; app.player.vx=0; app.player.vy=0; app.player.grounded=true; app.lastAdvanceAt=performance.now()+500; app.eventRuntime={ startedLocal:performance.now(), damageDone:false, healDone:false, rocket:null, rocketHit:false, lauraX:-130, lauraActiveAt:0, lauraObstacles:null, runes:null, runesCollected:0, kronosCleared:false, maletaTick:0, scaldTick:0, quicksandTick:0, stormTick:0, stormClouds:null, stormBolts:[], wardenTick:0, wardenLaser:0, wardenWarn:0 }; }
     function currentHero(){ const me=myServerPlayer(); return me?.hero || app.selectedHero || 'votenot'; }
     function eventType(){ return app.state.game?.event?.type || 'none'; }
-    function isRoomLocked(){ return eventType()==='kronos' && !app.eventRuntime.kronosCleared; }
-    function step(dt){ const game=app.state.game||{}; const me=myServerPlayer(); if(game.mode!=='playing'||!me||!me.alive||me.out)return; const stunned = performance.now() < (app.stunUntil||0); const slow = eventType()==='web' ? .7 : (eventType()==='areia'||eventType()==='quicksand') ? .72 : 1; const heroSpeed = currentHero()==='shadow' ? 1.02 : 1; const speed=(app.input.defend?95:210)*slow*heroSpeed; let vx=0; const nowDash=performance.now(); const dashing=nowDash<(app.dashUntil||0); if(currentHero()==='shadow'&&app.input.dash&&!stunned&&nowDash-(app.lastDashAt||0)>900){ app.lastDashAt=nowDash; app.dashUntil=nowDash+170; toast('Shadow dash!'); } if(!stunned){ if(app.input.left)vx-=speed; if(app.input.right)vx+=speed; } if(dashing){ vx=app.player.dir*620; } app.player.vx=stunned?0:vx; if(app.input.jump&&app.player.grounded&&!app.input.defend&&!stunned){ app.player.vy = eventType()==='kronos' ? -840 : -560; app.player.grounded=false; } app.player.vy+=1500*dt; app.player.x+=app.player.vx*dt; app.player.y+=app.player.vy*dt; if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; } app.player.x=Math.max(38,Math.min(924,app.player.x)); app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir; app.player.defending=app.input.defend; app.player.anim=app.input.defend?'defense':!app.player.grounded?'jump':Math.abs(app.player.vx)>3?'walk':'idle'; handleEventHazard(dt,game,me); const t=performance.now(); if(app.player.x>EXIT_X && !isRoomLocked() && t-app.lastAdvanceAt>900){ app.lastAdvanceAt=t; send({type:'advanceRoom'}); } if(t-app.lastPosSent>100){ app.lastPosSent=t; send({type:'position', x:app.player.x, y:app.player.y, vx:app.player.vx, vy:app.player.vy, dir:app.player.dir, anim:app.player.anim, defending:app.player.defending}); } }
+    function isRoomLocked(){ const ev=app.state.game?.event; const w=app.state.game?.warden; return (eventType()==='kronos' && !app.eventRuntime.kronosCleared) || (eventType()==='wardenBoss' && !(w?.defeated || ev?.defeated)); }
+    
+    function ensureLauraObstacles(){
+      const rt=app.eventRuntime;
+      if(!rt.lauraObstacles){
+        rt.lauraObstacles=[
+          {x:318,w:42,h:38},
+          {x:560,w:54,h:32},
+          {x:770,w:44,h:46}
+        ].map((o,i)=>({...o,i}));
+      }
+      return rt.lauraObstacles;
+    }
+    function resolveLauraObstacles(prevX){
+      if(eventType()!=='laura') return;
+      const obs=ensureLauraObstacles();
+      for(const o of obs){
+        const left=o.x-o.w/2-22;
+        const right=o.x+o.w/2+22;
+        const top=GROUND_Y-o.h;
+        const feet=app.player.y;
+        const collidingX=app.player.x>left && app.player.x<right;
+        const lowEnough=feet>top+5;
+        if(collidingX && lowEnough){
+          if(prevX<=left) app.player.x=left;
+          else if(prevX>=right) app.player.x=right;
+          else app.player.x=(app.player.vx>=0?left:right);
+          app.player.vx=0;
+          toast('Pule sobre o obstáculo da Laura!',700);
+        }
+      }
+    }
+    function wardenPlayerList(){
+      const me=myServerPlayer();
+      const map=new Map();
+      if(me) map.set(me.id,{...me,x:app.player.x,y:app.player.y,vx:app.player.vx,defending:app.input.defend,alive:me.alive,out:me.out});
+      for(const p of app.state.players||[]) if(!map.has(p.id)) map.set(p.id,p);
+      return [...map.values()].filter(p=>p.alive&&!p.out);
+    }
+    function playerOnWardenMark(p,m){
+      return Math.abs((p.x||0)-m.x)<m.r && Math.abs((p.y||GROUND_Y)-GROUND_Y)<38;
+    }
+    function checkWardenMarks(){
+      const w=app.state.game?.warden;
+      if(eventType()!=='wardenBoss'||!w||w.defeated||!w.marksActive||!Array.isArray(w.marks)||w.marks.length<2) return;
+      const rt=app.eventRuntime;
+      if(rt.sentWardenCycle===w.cycle) return;
+      const players=wardenPlayerList();
+      if(players.length<2) return;
+      const occ=w.marks.map(m=>players.find(p=>playerOnWardenMark(p,m))?.id||null);
+      if(occ[0] && occ[1] && occ[0]!==occ[1]){
+        rt.sentWardenCycle=w.cycle;
+        send({type:'wardenMarkHit', cycle:w.cycle});
+        toast('As duas marcas atingiram o Warden!',900);
+      }
+    }
+    function handleWardenHazard(dt){
+      const game=app.state.game||{};
+      const w=game.warden;
+      if(eventType()!=='wardenBoss'||!w||w.defeated) return;
+      const rt=app.eventRuntime;
+      const moving=Math.abs(app.player.vx)>8 || app.input.left || app.input.right || (performance.now()<(app.dashUntil||0));
+      if(app.input.defend){
+        rt.wardenYellow=(rt.wardenYellow||0)+dt;
+        rt.wardenRed=0;
+      } else if(moving){
+        rt.wardenRed=(rt.wardenRed||0)+dt;
+        rt.wardenYellow=0;
+      } else {
+        rt.wardenRed=0;
+        rt.wardenYellow=0;
+      }
+      if(rt.wardenRed>=2){
+        rt.wardenRed=0;
+        damage(20,'Quadrado vermelho do Warden');
+        toast('O quadrado vermelho queimou você: -20 HP',900);
+      }
+      if(rt.wardenYellow>=3){
+        rt.wardenYellow=0;
+        damage(10,'Quadrado amarelo do Warden');
+        toast('Defesa prolongada no Warden: -10 HP',900);
+      }
+      const laserCycle=Math.floor(eventSeconds()/3);
+      if(laserCycle>0 && rt.wardenLaserCycle!==laserCycle){
+        rt.wardenLaserCycle=laserCycle;
+        const players=wardenPlayerList();
+        const target=players.length?players[(Number(game.event?.seed||1)+laserCycle)%players.length]:myServerPlayer();
+        const tx=target?.id===app.myId?app.player.x:(target?.x||760);
+        rt.wardenLaser={cycle:laserCycle,targetId:target?.id||app.myId,x:tx,t:performance.now()};
+        if(target?.id===app.myId){
+          if(app.input.defend) toast('Você defendeu o laser do Warden.',800);
+          else damage(10,'Laser do Warden');
+        }
+      }
+      checkWardenMarks();
+    }
+
+    function step(dt){
+      const game=app.state.game||{};
+      const me=myServerPlayer();
+      if(game.mode!=='playing'||!me||!me.alive||me.out)return;
+      const stunned = performance.now() < (app.stunUntil||0);
+      const slow = eventType()==='web' ? .7 : (eventType()==='areia'||eventType()==='quicksand') ? .72 : 1;
+      const heroSpeed = currentHero()==='shadow' ? 1.02 : 1;
+      const speed=(app.input.defend?95:210)*slow*heroSpeed;
+      let vx=0;
+      const nowDash=performance.now();
+      const dashing=nowDash<(app.dashUntil||0);
+      if(currentHero()==='shadow'&&app.input.dash&&!stunned&&nowDash-(app.lastDashAt||0)>900){
+        app.lastDashAt=nowDash; app.dashUntil=nowDash+170; toast('Shadow dash!');
+      }
+      if(!stunned){ if(app.input.left)vx-=speed; if(app.input.right)vx+=speed; }
+      if(dashing){ vx=app.player.dir*620; }
+      app.player.vx=stunned?0:vx;
+      if(app.input.jump&&app.player.grounded&&!app.input.defend&&!stunned){
+        app.player.vy = eventType()==='kronos' ? -840 : -560;
+        app.player.grounded=false;
+      }
+      app.player.vy+=1500*dt;
+      const prevX=app.player.x;
+      app.player.x+=app.player.vx*dt;
+      app.player.y+=app.player.vy*dt;
+      if(app.player.y>=GROUND_Y){ app.player.y=GROUND_Y; app.player.vy=0; app.player.grounded=true; }
+      resolveLauraObstacles(prevX);
+      if(eventType()==='wardenBoss' && isRoomLocked()) app.player.x=Math.min(app.player.x,820);
+      app.player.x=Math.max(38,Math.min(924,app.player.x));
+      app.player.dir=app.player.vx<-2?-1:app.player.vx>2?1:app.player.dir;
+      app.player.defending=app.input.defend;
+      app.player.anim=app.input.defend?'defense':!app.player.grounded?'jump':Math.abs(app.player.vx)>3?'walk':'idle';
+      handleEventHazard(dt,game,me);
+      const t=performance.now();
+      if(app.player.x>EXIT_X && !isRoomLocked() && t-app.lastAdvanceAt>900){
+        app.lastAdvanceAt=t;
+        send({type:'advanceRoom'});
+      }
+      if(t-app.lastPosSent>100){
+        app.lastPosSent=t;
+        send({type:'position', x:app.player.x, y:app.player.y, vx:app.player.vx, vy:app.player.vy, dir:app.player.dir, anim:app.player.anim, defending:app.player.defending});
+      }
+    }
     function damage(amount,reason){ if(currentHero()==='shadow'){ amount=Math.max(0, amount*0.95); } const t=performance.now(); if(t-app.lastDamageAt<500)return; app.lastDamageAt=t; send({type:'damage', amount, reason}); }
     function heal(amount){ send({type:'heal', amount}); }
     function eventSeconds(){ return (performance.now()-(app.eventRuntime.startedLocal||performance.now()))/1000; }
@@ -277,36 +415,16 @@
       if(ev.type==='quicksand'){ rt.quicksandTick=(rt.quicksandTick||0)+dt; if(app.player.grounded){ app.player.x -= app.player.vx * dt * 0.18; } if(rt.quicksandTick>1.2){ rt.quicksandTick=0; if(app.player.grounded) damage(2,'Areia Movediça'); } }
       if(ev.type==='laura'){
         if(rt.lauraX==null) rt.lauraX=-130;
-        if(!rt.lauraObstacles){
-          rt.lauraObstacles=[{x:318,w:42,h:38},{x:560,w:54,h:32},{x:770,w:44,h:46}].map((o,i)=>({...o,cool:0,i}));
-        }
+        ensureLauraObstacles();
         const dir=Math.sign(app.player.x-rt.lauraX)||1;
         rt.lauraX+=dir*116*dt;
         const lauraOnScreen = rt.lauraX > 18 && rt.lauraX < W-18;
         if(lauraOnScreen && !rt.lauraActiveAt) rt.lauraActiveAt=performance.now()+350;
         const lauraReady = !!rt.lauraActiveAt && performance.now()>=rt.lauraActiveAt;
         const dx=Math.abs(rt.lauraX-app.player.x);
-        const jumpingOver = app.player.y < GROUND_Y-14;
         if(lauraOnScreen && lauraReady && dx<40){
-          if(jumpingOver){
-            app.player.x += (app.player.x < rt.lauraX ? -1 : 1) * 20;
-            app.player.vy=Math.max(app.player.vy,620);
-            toast('Laura bloqueou o salto!',800);
-          } else {
-            damage(999,'Laura');
-            toast('Laura te alcançou!',900);
-          }
-        }
-        for(const o of rt.lauraObstacles){
-          o.cool=Math.max(0,(o.cool||0)-dt);
-          const inX=app.player.x>o.x-o.w/2-22 && app.player.x<o.x+o.w/2+22;
-          const inY=app.player.y>GROUND_Y-o.h-64;
-          if(inX&&inY&&o.cool<=0){
-            o.cool=1.1;
-            app.player.x += (app.player.x < o.x ? -1 : 1) * 18;
-            app.stunUntil=performance.now()+180;
-            toast('Obstáculo da Laura!',700);
-          }
+          damage(999,'Laura');
+          toast('Laura te alcançou!',900);
         }
       }
       if(ev.type==='kronos'){ if(!rt.runes){ rt.runes=(ev.runes||[]).map((r,i)=>({...r,baseX:r.x,baseY:Math.max(270,Math.min(385,r.y||330)),phase:i*1.7,got:false,i})); rt.runesCollected=0; } const tm=performance.now()/1000; for(const r of rt.runes){ const rx=(r.baseX||r.x)+Math.sin(tm*.75+r.phase)*18; const ry=(r.baseY||r.y)+Math.cos(tm*.65+r.phase)*10; r.drawX=rx; r.drawY=ry; if(!r.got&&Math.hypot(app.player.x-rx,(app.player.y-78)-ry)<60){ r.got=true; rt.runesCollected++; toast(`Runa ${rt.runesCollected}/${rt.runes.length}`); } } if(!rt.kronosCleared && rt.runesCollected>=rt.runes.length){ rt.kronosCleared=true; toast('Kronos liberou a passagem.'); send({type:'clearEvent', message:'Kronos liberou a passagem.'}); } }
@@ -324,7 +442,7 @@
           }
         }
       }
-      if(ev.type==='wardenBoss'){ rt.wardenTick=(rt.wardenTick||0)+dt; if(rt.wardenTick>3.2){ rt.wardenTick=0; rt.wardenWarn=1.1; rt.wardenLaser=(ev.seed+Math.floor(performance.now()/1000))%3; } if(rt.wardenWarn>0){ rt.wardenWarn-=dt; if(rt.wardenWarn<=0){ const lanes=[250,340,430]; const ly=lanes[rt.wardenLaser||0]; if(Math.abs((app.player.y-45)-ly)<45 && !app.input.defend) damage(30,'Warden'); else toast('Você desviou do raio do Warden.'); } } }
+      if(ev.type==='wardenBoss'){ handleWardenHazard(dt); }
     }
     function roomImage(){ const r=app.state.game?.room||1; const n=((r-1)%30)+1; return `room_${String(n).padStart(2,'0')}.png`; }
     function draw(){ ctx.clearRect(0,0,W,H); const bg=imgs[roomImage()]||imgs['room_01.png']; if(bg&&bg.complete&&bg.naturalWidth) ctx.drawImage(bg,0,0,W,H); else { const g=ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,'#0b203b'); g.addColorStop(1,'#070a16'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); } ctx.fillStyle='rgba(0,0,0,.20)'; ctx.fillRect(0,0,W,H); drawGround(); drawEventLayer(); drawExit(); drawPlayers(); drawEffects(); if(performance.now()<app.toastUntil) $('toast').style.display='block'; else $('toast').style.display='none'; }
@@ -393,7 +511,65 @@
         }
         ctx.restore();
       }
-      if(ev.type==='wardenBoss'){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='rgba(70,170,255,.15)'; const lanes=[250,340,430]; for(const y of lanes)ctx.fillRect(0,y-28,W,56); if(app.eventRuntime.wardenWarn>0){ const y=lanes[app.eventRuntime.wardenLaser||0]; ctx.fillStyle='rgba(0,220,255,.35)'; ctx.fillRect(0,y-35,W,70); } }
+      if(ev.type==='wardenBoss'){
+        const w=app.state.game?.warden||{};
+        ctx.fillStyle='rgba(0,0,0,.30)';
+        ctx.fillRect(0,0,W,H);
+        if(!w.defeated){
+          const marks=w.marksActive ? (w.marks||[]) : [];
+          for(const m of marks){
+            const pulse=.75+Math.sin(performance.now()/180+m.x)*.18;
+            ctx.fillStyle=`rgba(60,255,130,${0.25*pulse})`;
+            ctx.beginPath();
+            ctx.ellipse(m.x,GROUND_Y+6,m.r,13,0,0,Math.PI*2);
+            ctx.fill();
+            ctx.strokeStyle='rgba(100,255,160,.95)';
+            ctx.lineWidth=3;
+            ctx.stroke();
+          }
+          if(!w.marksActive && w.nextMarksAt){
+            const sec=Math.max(0,Math.ceil((w.nextMarksAt-Date.now())/1000));
+            ctx.fillStyle='rgba(255,255,255,.9)';
+            ctx.font='900 16px Arial';
+            ctx.textAlign='center';
+            ctx.fillText(`Novas marcas em ${sec}s`,W/2,GROUND_Y-34);
+            ctx.textAlign='start';
+          }
+          ctx.fillStyle='rgba(15,35,45,.88)';
+          ctx.fillRect(850,GROUND_Y-152,92,152);
+          ctx.strokeStyle='rgba(90,255,180,.78)';
+          ctx.lineWidth=4;
+          ctx.strokeRect(850,GROUND_Y-152,92,152);
+          const img=imgs['guarda.png']||imgs['warden.png'];
+          if(img&&img.complete&&img.naturalWidth) ctx.drawImage(img,842,GROUND_Y-168,112,168);
+          ctx.fillStyle='rgba(0,0,0,.65)';
+          ctx.fillRect(730,54,230,18);
+          ctx.fillStyle='rgba(80,255,130,.90)';
+          ctx.fillRect(732,56,226*Math.max(0,(w.hp||0)/(w.maxHp||200)),14);
+          ctx.strokeStyle='rgba(255,255,255,.5)';
+          ctx.strokeRect(730,54,230,18);
+          ctx.fillStyle='rgba(255,255,255,.92)';
+          ctx.font='900 14px Arial';
+          ctx.fillText(`WARDEN ${Math.max(0,Math.round(w.hp||0))}/${w.maxHp||200}`,742,48);
+          ctx.fillStyle='rgba(20,255,140,.20)';
+          ctx.fillRect(820,110,12,GROUND_Y-110);
+        } else {
+          ctx.fillStyle='rgba(120,255,170,.16)';
+          ctx.fillRect(820,100,130,GROUND_Y-100);
+        }
+        const laser=app.eventRuntime.wardenLaser;
+        if(laser && performance.now()-laser.t<650){
+          const alpha=Math.max(0,1-(performance.now()-laser.t)/650);
+          ctx.strokeStyle=`rgba(80,255,240,${alpha})`;
+          ctx.lineWidth=7;
+          ctx.beginPath();
+          ctx.moveTo(880,GROUND_Y-112);
+          ctx.lineTo(laser.x,GROUND_Y-70);
+          ctx.stroke();
+          ctx.fillStyle=`rgba(80,255,240,${alpha*.18})`;
+          ctx.fillRect(laser.x-46,0,92,H);
+        }
+      }
     }
     
     function cleanBlackBorderImage(file){
@@ -470,6 +646,25 @@
       if(ev.type==='akane'){
         const img=imgs[ev.mode==='heal'?'akane_heal.png':'akane_damage.png']||imgs['akane.png'];
         if(img&&img.complete&&img.naturalWidth) ctx.drawImage(img,680,GROUND_Y-130,90,130);
+      }
+
+      if(ev.type==='wardenBoss' && app.state.game?.warden && !app.state.game.warden.defeated){
+        const players=wardenPlayerList();
+        for(const p of players){
+          const isMe=p.id===app.myId;
+          const moving=isMe ? (Math.abs(app.player.vx)>8 || app.input.left || app.input.right) : Math.abs(p.vx||0)>8;
+          const defending=isMe ? app.input.defend : !!p.defending;
+          let col='rgba(70,255,120,.92)';
+          if(defending) col='rgba(255,225,65,.95)';
+          else if(moving) col='rgba(255,70,70,.95)';
+          const px=isMe?app.player.x:p.x, py=isMe?app.player.y:p.y;
+          ctx.strokeStyle=col;
+          ctx.lineWidth=4;
+          ctx.shadowColor=col;
+          ctx.shadowBlur=12;
+          ctx.strokeRect(px-38,py-124,76,124);
+          ctx.shadowBlur=0;
+        }
       }
     }
     function drawPlayers(){ for(const p of friendPlayers())drawServerPlayer(p,false); const me=myServerPlayer(); if(me&&app.state.game?.mode==='playing')drawLocalPlayer(me); }
